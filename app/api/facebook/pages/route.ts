@@ -124,3 +124,55 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await auth();
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const pageId = searchParams.get('pageId');
+    const provider = searchParams.get('provider') || 'facebook';
+
+    if (!pageId) {
+      return NextResponse.json(
+        { error: 'Page ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Find and delete the connected page
+    const connectedPage = await prisma.connectedPage.findFirst({
+      where: {
+        userId: session.user.id,
+        pageId,
+        provider,
+      },
+    });
+
+    if (!connectedPage) {
+      return NextResponse.json(
+        { error: 'Page not found or not connected' },
+        { status: 404 }
+      );
+    }
+
+    // Delete the connected page (this will also delete associated comments due to cascade)
+    await prisma.connectedPage.delete({
+      where: {
+        id: connectedPage.id,
+      },
+    });
+
+    return NextResponse.json({ success: true, message: 'Page disconnected successfully' });
+  } catch (error) {
+    console.error('Error disconnecting page:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+

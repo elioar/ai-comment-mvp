@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signOut, signIn } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -34,6 +34,7 @@ export default function PagesPage() {
   const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -114,6 +115,32 @@ export default function PagesPage() {
       setError('Error connecting page');
     } finally {
       setConnecting(null);
+    }
+  };
+
+  const disconnectPage = async (pageId: string, provider: string = 'facebook') => {
+    if (!confirm('Are you sure you want to disconnect this page? All comments data for this page will be removed.')) {
+      return;
+    }
+
+    setDisconnecting(pageId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/facebook/pages?pageId=${pageId}&provider=${provider}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchData();
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to disconnect page');
+      }
+    } catch (error) {
+      console.error('Error disconnecting page:', error);
+      setError('Error disconnecting page');
+    } finally {
+      setDisconnecting(null);
     }
   };
 
@@ -411,12 +438,28 @@ export default function PagesPage() {
                               </div>
                             </div>
                           </div>
-                          <Link
-                            href={`/dashboard/comments?pageId=${page.pageId}`}
-                            className="block w-full text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                          >
-                            View Comments
-                          </Link>
+                          <div className="flex gap-2">
+                            <Link
+                              href={`/dashboard/comments?pageId=${page.pageId}`}
+                              className="flex-1 text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                            >
+                              View Comments
+                            </Link>
+                            <button
+                              onClick={() => disconnectPage(page.pageId, page.provider)}
+                              disabled={disconnecting === page.pageId}
+                              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
+                              title="Disconnect page"
+                            >
+                              {disconnecting === page.pageId ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -432,12 +475,15 @@ export default function PagesPage() {
                       <p className="text-gray-600 dark:text-gray-400 mb-4">
                         No Facebook pages found. Make sure you're logged in with Facebook and have page admin access.
                       </p>
-                      <Link
-                        href="/login"
-                        className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                      <button
+                        onClick={() => signIn('facebook', { callbackUrl: '/dashboard/pages' })}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                       >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                        </svg>
                         Connect Facebook Account
-                      </Link>
+                      </button>
                     </div>
                   ) : (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
