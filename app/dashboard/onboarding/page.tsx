@@ -3,14 +3,35 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSession, signIn } from 'next-auth/react';
 import { useTranslation } from 'react-i18next';
+
+interface FacebookPage {
+  id: string;
+  name: string;
+  access_token: string;
+}
+
+interface ConnectedPage {
+  id: string;
+  pageId: string;
+  pageName: string;
+  provider: string;
+  createdAt: string;
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedFbPages, setSelectedFbPages] = useState<string[]>([]);
-  const [selectedIgPages, setSelectedIgPages] = useState<string[]>([]);
+  const [fbPages, setFbPages] = useState<FacebookPage[]>([]);
+  const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [facebookConnected, setFacebookConnected] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   // Mount component to avoid hydration mismatch
@@ -18,26 +39,119 @@ export default function OnboardingPage() {
     setMounted(true);
   }, []);
 
-  const totalSteps = 4;
+  // Check if user is authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [status, router]);
 
-  // Mock data for testing
-  const mockFbPages = [
-    { id: '1', name: 'My Business Page', followers: '12.5K', image: '📘' },
-    { id: '2', name: 'Tech Blog', followers: '8.2K', image: '💻' },
-    { id: '3', name: 'Lifestyle & Travel', followers: '25.1K', image: '✈️' },
-  ];
+  // Check if Facebook is connected and fetch pages
+  useEffect(() => {
+    if (session && currentStep === 2) {
+      checkFacebookConnection();
+    }
+  }, [session, currentStep]);
 
-  const mockIgPages = [
-    { id: '1', name: '@mybusiness', followers: '45.2K', image: '📸' },
-    { id: '2', name: '@techblog_official', followers: '32.8K', image: '🎨' },
-    { id: '3', name: '@lifestyle.travels', followers: '67.5K', image: '🌍' },
-  ];
+  const checkFacebookConnection = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/facebook/pages');
+      if (response.ok) {
+        const data = await response.json();
+        setFbPages(data.pages || []);
+        setConnectedPages(data.connectedPages || []);
+        
+        // Check if Facebook account is connected
+        if (data.pages && data.pages.length > 0) {
+          setFacebookConnected(true);
+          // Pre-select already connected pages
+          const connectedPageIds = data.connectedPages.map((cp: ConnectedPage) => cp.pageId);
+          setSelectedFbPages(connectedPageIds);
+        } else if (data.error && data.error.includes('No Facebook account connected')) {
+          setFacebookConnected(false);
+        } else {
+          setFacebookConnected(true);
+        }
+      } else {
+        setError('Failed to check Facebook connection');
+      }
+    } catch (error) {
+      console.error('Error checking Facebook connection:', error);
+      setError('Error loading Facebook pages');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFacebookLogin = async () => {
+    try {
+      await signIn('facebook', { 
+        callbackUrl: '/dashboard/onboarding?step=2',
+        redirect: true 
+      });
+    } catch (error) {
+      console.error('Facebook login error:', error);
+      setError('Failed to connect Facebook account');
+    }
+  };
+
+  const connectPage = async (page: FacebookPage) => {
+    setConnecting(page.id);
+    setError(null);
+    try {
+      const response = await fetch('/api/facebook/pages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pageId: page.id,
+          pageName: page.name,
+          pageAccessToken: page.access_token,
+          provider: 'facebook',
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh pages list
+        await checkFacebookConnection();
+        // Add to selected if not already
+        if (!selectedFbPages.includes(page.id)) {
+          setSelectedFbPages([...selectedFbPages, page.id]);
+        }
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to connect page');
+      }
+    } catch (error) {
+      console.error('Error connecting page:', error);
+      setError('Error connecting page');
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const toggleFbPage = (pageId: string) => {
+    const page = fbPages.find(p => p.id === pageId);
+    if (page) {
+      if (selectedFbPages.includes(pageId)) {
+        // Already connected, just toggle selection
+        setSelectedFbPages(prev => prev.filter(id => id !== pageId));
+      } else {
+        // Not connected yet, connect it
+        connectPage(page);
+      }
+    }
+  };
+
+  const totalSteps = 3;
 
   const steps = [
-    { number: 1, title: t('onboarding.steps.welcome'), description: t('onboarding.steps.welcomeDesc') },
-    { number: 2, title: t('onboarding.steps.connectFacebook'), description: t('onboarding.steps.connectFacebookDesc') },
-    { number: 3, title: t('onboarding.steps.connectInstagram'), description: t('onboarding.steps.connectInstagramDesc') },
-    { number: 4, title: t('onboarding.steps.allSet'), description: t('onboarding.steps.allSetDesc') },
+    { number: 1, title: t('onboarding.steps.welcome') || 'Welcome', description: t('onboarding.steps.welcomeDesc') || 'Get started with AI comment management' },
+    { number: 2, title: t('onboarding.steps.connectFacebook') || 'Connect Facebook', description: t('onboarding.steps.connectFacebookDesc') || 'Link your Facebook pages' },
+    { number: 3, title: t('onboarding.steps.allSet') || 'All Set!', description: t('onboarding.steps.allSetDesc') || 'Start managing comments' },
   ];
 
   const handleNext = () => {
@@ -53,20 +167,19 @@ export default function OnboardingPage() {
     router.push('/dashboard');
   };
 
-  const toggleFbPage = (pageId: string) => {
-    setSelectedFbPages(prev =>
-      prev.includes(pageId) ? prev.filter(id => id !== pageId) : [...prev, pageId]
-    );
-  };
-
-  const toggleIgPage = (pageId: string) => {
-    setSelectedIgPages(prev =>
-      prev.includes(pageId) ? prev.filter(id => id !== pageId) : [...prev, pageId]
-    );
-  };
-
   // Prevent hydration mismatch - wait for mount
-  if (!mounted) {
+  if (!mounted || status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-violet-50 dark:from-gray-950 dark:via-black dark:to-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-300">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
     return null;
   }
 
@@ -127,14 +240,14 @@ export default function OnboardingPage() {
             <div className="p-8 sm:p-12 text-center">
               <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-violet-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
                 <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
               </div>
               <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-                {t('onboarding.welcome.title')} 🎉
+                {t('onboarding.welcome.title') || 'Welcome to AI Comments! 🎉'}
               </h1>
               <p className="text-lg text-gray-600 dark:text-gray-300 mb-8 max-w-2xl mx-auto">
-                {t('onboarding.welcome.description')}
+                {t('onboarding.welcome.description') || 'Let\'s set up your account to start managing comments automatically with AI.'}
               </p>
 
               {/* Benefits Grid */}
@@ -145,8 +258,8 @@ export default function OnboardingPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{t('onboarding.welcome.benefits.fast')}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">{t('onboarding.welcome.benefits.fastDesc')}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{t('onboarding.welcome.benefits.fast') || 'Lightning Fast'}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{t('onboarding.welcome.benefits.fastDesc') || 'AI-powered responses in seconds'}</p>
                 </div>
 
                 <div className="p-4 bg-violet-50 dark:bg-violet-950 rounded-xl border border-violet-200 dark:border-violet-900">
@@ -155,8 +268,8 @@ export default function OnboardingPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                   </div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{t('onboarding.welcome.benefits.smart')}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">{t('onboarding.welcome.benefits.smartDesc')}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{t('onboarding.welcome.benefits.smart') || 'Smart & Safe'}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{t('onboarding.welcome.benefits.smartDesc') || 'Brand-safe AI responses'}</p>
                 </div>
 
                 <div className="p-4 bg-green-50 dark:bg-green-950 rounded-xl border border-green-200 dark:border-green-900">
@@ -165,8 +278,8 @@ export default function OnboardingPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{t('onboarding.welcome.benefits.save')}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">{t('onboarding.welcome.benefits.saveDesc')}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{t('onboarding.welcome.benefits.save') || 'Save Time'}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{t('onboarding.welcome.benefits.saveDesc') || 'Automate comment management'}</p>
                 </div>
               </div>
 
@@ -175,7 +288,7 @@ export default function OnboardingPage() {
                   onClick={handleNext}
                   className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
-                  {t('onboarding.welcome.getStarted')}
+                  {t('onboarding.welcome.getStarted') || 'Get Started'}
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
@@ -184,7 +297,7 @@ export default function OnboardingPage() {
                   onClick={handleSkip}
                   className="px-8 py-3.5 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-gray-900 rounded-xl transition-all"
                 >
-                  {t('onboarding.welcome.skipForNow')}
+                  {t('onboarding.welcome.skipForNow') || 'Skip for Now'}
                 </button>
               </div>
             </div>
@@ -200,66 +313,114 @@ export default function OnboardingPage() {
                   </svg>
                 </div>
                 <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
-                  {t('onboarding.facebook.title')}
+                  {t('onboarding.facebook.title') || 'Connect Your Facebook Pages'}
                 </h2>
                 <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-                  {t('onboarding.facebook.description')}
+                  {t('onboarding.facebook.description') || 'Connect your Facebook pages to start managing comments automatically.'}
                 </p>
               </div>
+
+              {error && (
+                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+                </div>
+              )}
 
               {/* Facebook Connect Button */}
-              <div className="mb-8 text-center">
-                <button className="inline-flex items-center gap-3 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl">
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                  {t('onboarding.facebook.connectButton')}
-                </button>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-                  {t('onboarding.facebook.security')}
-                </p>
-              </div>
-
-              {/* Mock Pages Selection */}
-              <div className="space-y-3 mb-8">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
-                  {t('onboarding.facebook.selectPages')} ({selectedFbPages.length} {t('onboarding.facebook.selected')})
-                </p>
-                {mockFbPages.map((page) => (
-                  <div
-                    key={page.id}
-                    onClick={() => toggleFbPage(page.id)}
-                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                      selectedFbPages.includes(page.id)
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 shadow-md'
-                        : 'border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-md'
-                    }`}
+              {!facebookConnected && (
+                <div className="mb-8 text-center">
+                  <button
+                    onClick={handleFacebookLogin}
+                    className="inline-flex items-center gap-3 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-2xl shadow-md">
-                        {page.image}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">{page.name}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{page.followers} followers</p>
-                      </div>
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                    </svg>
+                    {t('onboarding.facebook.connectButton') || 'Connect Facebook Account'}
+                  </button>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+                    {t('onboarding.facebook.security') || 'We use secure OAuth to connect your account. Your password is never shared.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Loading State */}
+              {loading && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-12 h-12 border-4 border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin"></div>
+                </div>
+              )}
+
+              {/* Facebook Pages Selection */}
+              {facebookConnected && !loading && (
+                <div className="space-y-3 mb-8">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
+                    {t('onboarding.facebook.selectPages') || 'Select Pages to Connect'} ({selectedFbPages.length} {t('onboarding.facebook.selected') || 'selected'})
+                  </p>
+                  
+                  {fbPages.length === 0 ? (
+                    <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-xl">
+                      <p className="text-gray-600 dark:text-gray-400">
+                        {t('onboarding.facebook.noPages') || 'No Facebook pages found. Make sure you have admin access to at least one page.'}
+                      </p>
                     </div>
-                    <div
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                        selectedFbPages.includes(page.id)
-                          ? 'border-blue-500 bg-blue-500'
-                          : 'border-gray-300 dark:border-gray-700'
-                      }`}
-                    >
-                      {selectedFbPages.includes(page.id) && (
-                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ) : (
+                    fbPages.map((page) => {
+                      const isConnected = connectedPages.some(cp => cp.pageId === page.id);
+                      const isSelected = selectedFbPages.includes(page.id);
+                      
+                      return (
+                        <div
+                          key={page.id}
+                          onClick={() => !isConnected && toggleFbPage(page.id)}
+                          className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                            isConnected || isSelected
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 shadow-md cursor-default'
+                              : 'border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-md cursor-pointer'
+                          } ${isConnected ? 'opacity-75' : ''}`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md">
+                              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900 dark:text-white">{page.name}</p>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {isConnected ? 'Already connected' : 'Click to connect'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {isConnected && (
+                              <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs font-medium rounded-full">
+                                Connected
+                              </span>
+                            )}
+                            {connecting === page.id && (
+                              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            )}
+                            <div
+                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                isConnected || isSelected
+                                  ? 'border-blue-500 bg-blue-500'
+                                  : 'border-gray-300 dark:border-gray-700'
+                              }`}
+                            >
+                              {(isConnected || isSelected) && (
+                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-3 justify-between">
                 <button
@@ -269,21 +430,21 @@ export default function OnboardingPage() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                  {t('onboarding.navigation.back')}
+                  {t('onboarding.navigation.back') || 'Back'}
                 </button>
                 <div className="flex gap-3">
                   <button
                     onClick={handleSkip}
                     className="px-6 py-3 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-gray-900 rounded-xl transition-all"
                   >
-                    {t('onboarding.navigation.skip')}
+                    {t('onboarding.navigation.skip') || 'Skip'}
                   </button>
                   <button
                     onClick={handleNext}
-                    disabled={selectedFbPages.length === 0}
+                    disabled={!facebookConnected || selectedFbPages.length === 0}
                     className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {t('onboarding.navigation.continue')}
+                    {t('onboarding.navigation.continue') || 'Continue'}
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -293,111 +454,8 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 3: Connect Instagram */}
+          {/* Step 3: Success/Complete */}
           {currentStep === 3 && (
-            <div className="p-8 sm:p-12">
-              <div className="text-center mb-8">
-                <div className="w-20 h-20 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
-                  <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                  </svg>
-                </div>
-                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
-                  {t('onboarding.instagram.title')}
-                </h2>
-                <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-                  {t('onboarding.instagram.description')}
-                </p>
-              </div>
-
-              {/* Instagram Connect Button */}
-              <div className="mb-8 text-center">
-                <button className="inline-flex items-center gap-3 px-6 py-3.5 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 hover:from-purple-700 hover:via-pink-700 hover:to-orange-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl">
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                  </svg>
-                  {t('onboarding.instagram.connectButton')}
-                </button>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-                  {t('onboarding.instagram.businessOnly')}
-                </p>
-              </div>
-
-              {/* Mock Instagram Accounts Selection */}
-              <div className="space-y-3 mb-8">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
-                  {t('onboarding.facebook.selectPages')} ({selectedIgPages.length} {t('onboarding.facebook.selected')})
-                </p>
-                {mockIgPages.map((page) => (
-                  <div
-                    key={page.id}
-                    onClick={() => toggleIgPage(page.id)}
-                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                      selectedIgPages.includes(page.id)
-                        ? 'border-pink-500 bg-pink-50 dark:bg-pink-950 shadow-md'
-                        : 'border-gray-200 dark:border-gray-800 hover:border-pink-300 dark:hover:border-pink-800 hover:shadow-md'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-600 rounded-xl flex items-center justify-center text-2xl shadow-md">
-                        {page.image}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">{page.name}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{page.followers} followers</p>
-                      </div>
-                    </div>
-                    <div
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                        selectedIgPages.includes(page.id)
-                          ? 'border-pink-500 bg-pink-500'
-                          : 'border-gray-300 dark:border-gray-700'
-                      }`}
-                    >
-                      {selectedIgPages.includes(page.id) && (
-                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 justify-between">
-                <button
-                  onClick={() => setCurrentStep(currentStep - 1)}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-gray-900 rounded-xl transition-all"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  {t('onboarding.navigation.back')}
-                </button>
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleSkip}
-                    className="px-6 py-3 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-gray-900 rounded-xl transition-all"
-                  >
-                    {t('onboarding.navigation.skip')}
-                  </button>
-                  <button
-                    onClick={handleNext}
-                    disabled={selectedIgPages.length === 0}
-                    className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {t('onboarding.navigation.continue')}
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Success/Complete */}
-          {currentStep === 4 && (
             <div className="p-8 sm:p-12 text-center">
               <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl animate-bounce">
                 <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -405,16 +463,16 @@ export default function OnboardingPage() {
                 </svg>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-                {t('onboarding.success.title')} 🎉
+                {t('onboarding.success.title') || 'You\'re All Set! 🎉'}
               </h2>
               <p className="text-lg text-gray-600 dark:text-gray-300 mb-8 max-w-2xl mx-auto">
-                {t('onboarding.success.description')}
+                {t('onboarding.success.description') || 'Your Facebook pages are connected. Start managing comments with AI!'}
               </p>
 
               {/* Summary */}
               <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950 dark:to-violet-950 rounded-2xl p-6 mb-8 border border-blue-200 dark:border-blue-900">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-4">{t('onboarding.success.connectedAccounts')}</h3>
-                <div className="grid sm:grid-cols-2 gap-4">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4">{t('onboarding.success.connectedAccounts') || 'Connected Accounts'}</h3>
+                <div className="grid sm:grid-cols-1 gap-4 max-w-md mx-auto">
                   <div className="bg-white dark:bg-gray-900 rounded-xl p-4">
                     <div className="flex items-center gap-3 mb-2">
                       <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -423,21 +481,8 @@ export default function OnboardingPage() {
                         </svg>
                       </div>
                       <div className="text-left">
-                        <p className="font-semibold text-gray-900 dark:text-white">{t('onboarding.success.facebook')}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{selectedFbPages.length} {t('onboarding.success.pages')}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-gray-900 rounded-xl p-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-pink-600 rounded-lg flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                        </svg>
-                      </div>
-                      <div className="text-left">
-                        <p className="font-semibold text-gray-900 dark:text-white">{t('onboarding.success.instagram')}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{selectedIgPages.length} {t('onboarding.success.accounts')}</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">{t('onboarding.success.facebook') || 'Facebook'}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{selectedFbPages.length} {t('onboarding.success.pages') || 'pages connected'}</p>
                       </div>
                     </div>
                   </div>
@@ -445,16 +490,16 @@ export default function OnboardingPage() {
               </div>
 
               {/* Next Steps */}
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-6 mb-8 text-left">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 text-center">{t('onboarding.success.whatNext')}</h3>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-6 mb-8 text-left max-w-2xl mx-auto">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 text-center">{t('onboarding.success.whatNext') || 'What\'s Next?'}</h3>
                 <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="w-6 h-6 bg-blue-100 dark:bg-blue-950 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-sm font-bold text-blue-600 dark:text-blue-400">1</span>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{t('onboarding.success.step1')}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('onboarding.success.step1Desc')}</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{t('onboarding.success.step1') || 'View Your Comments'}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('onboarding.success.step1Desc') || 'Go to the Comments page to see all comments from your connected pages'}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
@@ -462,8 +507,8 @@ export default function OnboardingPage() {
                       <span className="text-sm font-bold text-violet-600 dark:text-violet-400">2</span>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{t('onboarding.success.step2')}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('onboarding.success.step2Desc')}</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{t('onboarding.success.step2') || 'Set Up AI Replies'}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('onboarding.success.step2Desc') || 'Configure your AI response settings and templates'}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
@@ -471,8 +516,8 @@ export default function OnboardingPage() {
                       <span className="text-sm font-bold text-green-600 dark:text-green-400">3</span>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{t('onboarding.success.step3')}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('onboarding.success.step3Desc')}</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{t('onboarding.success.step3') || 'Start Managing'}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{t('onboarding.success.step3Desc') || 'Let AI help you respond to comments automatically'}</p>
                     </div>
                   </div>
                 </div>
@@ -482,7 +527,7 @@ export default function OnboardingPage() {
                 onClick={handleNext}
                 className="inline-flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
-                {t('onboarding.success.goToDashboard')}
+                {t('onboarding.success.goToDashboard') || 'Go to Dashboard'}
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
@@ -494,7 +539,7 @@ export default function OnboardingPage() {
         {/* Bottom Helper Text */}
         <div className="text-center mt-6">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {t('onboarding.needHelp')} <Link href="/help" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">{t('onboarding.contactSupport')}</Link>
+            {t('onboarding.needHelp') || 'Need help?'} <Link href="/help" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">{t('onboarding.contactSupport') || 'Contact Support'}</Link>
           </p>
         </div>
       </div>

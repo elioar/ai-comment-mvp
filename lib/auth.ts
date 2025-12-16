@@ -91,6 +91,21 @@ export const authOptions = {
     error: '/login',
   },
   callbacks: {
+    async signIn({ user, account }) {
+      // The PrismaAdapter automatically links accounts by email
+      // This callback ensures the linking works correctly
+      if (account && account.provider !== 'credentials' && user.email) {
+        try {
+          // PrismaAdapter will handle account linking automatically
+          // We just need to ensure the flow continues
+          return true;
+        } catch (error) {
+          console.error('Error in signIn callback:', error);
+          return true; // Allow sign-in to continue
+        }
+      }
+      return true;
+    },
     async jwt({ token, user }: { token: JWT; user?: User | undefined }) {
       try {
         if (user) {
@@ -119,7 +134,52 @@ export const authOptions = {
     },
   },
   events: {
-    async signIn(message: { user: User; account?: unknown; profile?: unknown; isNewUser?: boolean }) {
+    async signIn(message: { user: User; account?: any; profile?: any; isNewUser?: boolean }) {
+      // Link OAuth account to existing user account by email
+      if (message.account && message.account.provider !== 'credentials' && message.user.email) {
+        try {
+          // Find existing user with same email
+          const existingUser = await prisma.user.findUnique({
+            where: { email: message.user.email },
+            include: { accounts: true },
+          });
+
+          // If user exists and it's a different user (OAuth created new user)
+          if (existingUser && existingUser.id !== message.user.id) {
+            // Check if Facebook account is already linked to existing user
+            const existingFacebookAccount = await prisma.account.findFirst({
+              where: {
+                userId: existingUser.id,
+                provider: 'facebook',
+              },
+            });
+
+            // If not linked, link it
+            if (!existingFacebookAccount) {
+              // Update the OAuth account to point to existing user
+              await prisma.account.updateMany({
+                where: {
+                  providerAccountId: message.account.providerAccountId,
+                  provider: message.account.provider,
+                },
+                data: {
+                  userId: existingUser.id,
+                },
+              });
+
+              // Delete the duplicate user created by OAuth
+              await prisma.user.delete({
+                where: { id: message.user.id },
+              });
+
+              console.log('Linked Facebook account to existing user:', existingUser.email);
+            }
+          }
+        } catch (error) {
+          console.error('Error linking accounts:', error);
+        }
+      }
+
       // Log successful sign-ins in development
       if (process.env.NODE_ENV === 'development') {
         console.log('Sign in successful:', { 
