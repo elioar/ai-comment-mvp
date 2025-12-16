@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,7 @@ interface Comment {
   postId: string;
 }
 
-export default function CommentsPage() {
+function CommentsPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -472,6 +472,23 @@ export default function CommentsPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function CommentsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-300">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <CommentsPageContent />
+    </Suspense>
   );
 }
 
