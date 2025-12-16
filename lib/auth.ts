@@ -6,6 +6,7 @@ import type { JWT } from 'next-auth/jwt';
 import type { Session, User, Account, Profile } from 'next-auth';
 import { prisma } from './prisma';
 import bcrypt from 'bcryptjs';
+import { cookies } from 'next/headers';
 
 export const authOptions = {
   // Adapter is needed for OAuth providers to store accounts in database
@@ -93,24 +94,127 @@ export const authOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }: { user: User; account?: Account | null; profile?: Profile }) {
-      // Always return true to allow sign-in
-      // We'll link the Facebook account to the current logged-in user after OAuth completes
-      // This allows linking regardless of email matching
+      // If this is Facebook OAuth, try to link to existing user immediately
+      if (account?.provider === 'facebook') {
+        try {
+          // Try to get the original user ID from cookie (set before OAuth)
+          const cookieStore = await cookies();
+          const linkingUserId = cookieStore.get('linking_user_id')?.value;
+          
+          if (linkingUserId && linkingUserId !== user.id) {
+            // Store the new user ID before we change it (this is the duplicate created by OAuth)
+            const newUserId = user.id;
+            
+            // Link the Facebook account to the original user immediately
+            await prisma.account.updateMany({
+              where: {
+                providerAccountId: account.providerAccountId,
+                provider: 'facebook',
+              },
+              data: {
+                userId: linkingUserId,
+              },
+            });
+
+            // Get the original user to update the user object
+            const originalUser = await prisma.user.findUnique({
+              where: { id: linkingUserId },
+            });
+
+            if (originalUser) {
+              // Update the user object to point to original user
+              // This prevents NextAuth from creating a new session with the new user
+              user.id = originalUser.id;
+              user.email = originalUser.email;
+              user.name = originalUser.name || user.name;
+              
+              // Delete the duplicate user created by OAuth (use the stored newUserId)
+              try {
+                await prisma.user.delete({
+                  where: { id: newUserId },
+                });
+                console.log('Deleted duplicate user created by OAuth');
+              } catch (deleteError) {
+                // User might have dependencies, that's okay
+                console.log('Could not delete duplicate user, but account is linked');
+              }
+              
+              console.log('Linked Facebook account to original user in signIn callback:', originalUser.email);
+            }
+          } else {
+            // Fallback: check for recent sessions with non-Facebook accounts
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+            
+            const recentSessions = await prisma.session.findMany({
+              where: {
+                expires: {
+                  gte: new Date(), // Still valid
+                },
+                createdAt: {
+                  gte: tenMinutesAgo, // Created recently
+                },
+              },
+              include: {
+                user: {
+                  include: {
+                    accounts: true,
+                  },
+                },
+              },
+              orderBy: {
+                expires: 'desc',
+              },
+              take: 5,
+            });
+
+            // Find a user with non-Facebook accounts (the original logged-in user)
+            const originalUser = recentSessions.find(
+              (s) => 
+                s.user.id !== user.id && 
+                s.user.accounts.some((acc) => acc.provider !== 'facebook')
+            )?.user;
+
+            if (originalUser) {
+              // Link the Facebook account to the original user immediately
+              await prisma.account.updateMany({
+                where: {
+                  providerAccountId: account.providerAccountId,
+                  provider: 'facebook',
+                },
+                data: {
+                  userId: originalUser.id,
+                },
+              });
+
+              // Update the user object to point to original user
+              user.id = originalUser.id;
+              user.email = originalUser.email;
+              user.name = originalUser.name || user.name;
+              
+              console.log('Linked Facebook account to original user (fallback):', originalUser.email);
+            }
+          }
+        } catch (error) {
+          console.error('Error in signIn callback during account linking:', error);
+        }
+      }
+      
       return true;
     },
     async jwt({ token, user, account }: { token: JWT; user?: User | undefined; account?: Account | null }) {
       try {
         if (user) {
           // If we have an existing token with a user ID and this is a Facebook OAuth,
-          // we're linking accounts - preserve the original user ID
-          if (token.id && account?.provider === 'facebook' && user.id !== token.id) {
-            // This is a linking scenario - keep the original user's session
-            // The account will be linked via the link-account API
+          // and the user ID matches the token ID (meaning we linked in signIn callback),
+          // keep the original token to preserve the session
+          if (token.id && account?.provider === 'facebook' && user.id === token.id) {
+            // The signIn callback already linked the account and updated user.id to original user
+            // Just keep the existing token to preserve the session
             console.log('Preserving original user session during Facebook linking:', token.id);
-            return token; // Keep the original token
+            return token;
           }
           
-          // Normal sign-in - update token with new user
+          // Normal sign-in - update token with user info
           token.id = user.id;
           token.name = user.name;
           token.email = user.email;
