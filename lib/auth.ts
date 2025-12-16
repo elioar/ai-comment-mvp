@@ -1,4 +1,3 @@
-import { NextAuthOptions } from 'next-auth';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
@@ -6,7 +5,7 @@ import FacebookProvider from 'next-auth/providers/facebook';
 import { prisma } from './prisma';
 import bcrypt from 'bcryptjs';
 
-export const authOptions: NextAuthOptions = {
+export const authOptions = {
   // Adapter is needed for OAuth providers to store accounts in database
   // It won't interfere with JWT sessions
   adapter: PrismaAdapter(prisma) as any,
