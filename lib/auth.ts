@@ -2,6 +2,8 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import FacebookProvider from 'next-auth/providers/facebook';
+import type { JWT } from 'next-auth/jwt';
+import type { Session, User } from 'next-auth';
 import { prisma } from './prisma';
 import bcrypt from 'bcryptjs';
 
@@ -23,8 +25,11 @@ export const authOptions = {
             return null;
           }
 
+          const email = credentials.email as string;
+          const password = credentials.password as string;
+
           const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
+            where: { email },
           });
 
           if (!user || !user.password) {
@@ -32,7 +37,7 @@ export const authOptions = {
           }
 
           const isPasswordValid = await bcrypt.compare(
-            credentials.password,
+            password,
             user.password
           );
 
@@ -48,9 +53,9 @@ export const authOptions = {
 
           return {
             id: user.id,
-            name: user.name,
+            name: user.name || user.email.split('@')[0], // Fallback to email username if name is null
             email: user.email,
-            image: user.image,
+            image: user.image || undefined, // Convert null to undefined
           };
         } catch (error) {
           console.error('Authorization error:', error);
@@ -81,7 +86,7 @@ export const authOptions = {
     error: '/login',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: JWT; user?: User | undefined }) {
       try {
         if (user) {
           token.id = user.id;
@@ -94,7 +99,7 @@ export const authOptions = {
         return token;
       }
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: Session; token: JWT }) {
       try {
         if (token && session.user) {
           session.user.id = token.id as string;
@@ -109,31 +114,24 @@ export const authOptions = {
     },
   },
   events: {
-    async signIn({ user, account, profile }) {
+    async signIn(message: { user: User; account?: unknown; profile?: unknown; isNewUser?: boolean }) {
       // Log successful sign-ins in development
       if (process.env.NODE_ENV === 'development') {
-        console.log('Sign in successful:', { userId: user.id, email: user.email });
+        console.log('Sign in successful:', { 
+          userId: message.user.id, 
+          email: message.user.email, 
+          isNewUser: message.isNewUser 
+        });
       }
     },
-    async signOut({ session, token }) {
+    async signOut() {
       // Handle sign out if needed
     },
   },
-  logger: {
-    error(code, metadata) {
-      console.error('NextAuth error:', code, metadata);
-    },
-    warn(code) {
-      console.warn('NextAuth warning:', code);
-    },
-    debug(code, metadata) {
-      if (process.env.NODE_ENV === 'development') {
-        console.debug('NextAuth debug:', code, metadata);
-      }
-    },
-  },
+  // Logger removed - NextAuth v5 handles logging internally
+  // If you need custom logging, you can add it back with the correct v5 signature
   session: {
-    strategy: 'jwt',
+    strategy: 'jwt' as const,
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   secret: process.env.NEXTAUTH_SECRET,
