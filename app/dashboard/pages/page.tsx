@@ -150,7 +150,15 @@ export default function PagesPage() {
     setConnecting(page.id);
     setError(null);
     try {
-      const pageName = 'name' in page ? page.name : page.username;
+      // Determine page name based on provider type
+      let pageName: string;
+      if (provider === 'instagram' && 'username' in page) {
+        const instagramPage = page as InstagramPage;
+        pageName = instagramPage.username || instagramPage.name;
+      } else {
+        const facebookPage = page as FacebookPage;
+        pageName = facebookPage.name;
+      }
       const response = await fetch('/api/facebook/pages', {
         method: 'POST',
         headers: {
