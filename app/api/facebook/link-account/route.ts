@@ -9,15 +9,30 @@ const { auth } = NextAuth(authOptions);
  * This API route links a Facebook account to the currently logged-in user
  * It should be called after Facebook OAuth completes
  */
+import { cookies } from 'next/headers';
+
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
+    const body = await request.json().catch(() => ({}));
+    const cookieStore = await cookies();
     
-    if (!session?.user?.id) {
+    // Try to get original user ID from cookie (set before OAuth)
+    const linkingUserId = cookieStore.get('linking_user_id')?.value;
+    
+    // Use targetUserId from body, cookie, or current session
+    const targetUserId = body.targetUserId || linkingUserId || session?.user?.id;
+    
+    if (!targetUserId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const currentUserId = session.user.id;
+    const currentUserId = targetUserId;
+    
+    // Clear the cookie after use
+    if (linkingUserId) {
+      cookieStore.delete('linking_user_id');
+    }
 
     // First, check if current user already has a Facebook account
     const existingAccount = await prisma.account.findFirst({

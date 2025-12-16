@@ -70,24 +70,43 @@ export default function PagesPage() {
     try {
       // Check if we just came back from Facebook OAuth
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('linked') !== 'true') {
-        // Try to link any unlinked Facebook account to current user
+      const storedUserId = sessionStorage.getItem('linkingUserId');
+      
+      if (urlParams.get('linked') !== 'true' && storedUserId) {
+        // Try to link any unlinked Facebook account to the stored user ID
         const response = await fetch('/api/facebook/link-account', {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            targetUserId: storedUserId, // Pass the original user ID
+          }),
         });
         
         if (response.ok) {
           const data = await response.json();
           if (data.success && !data.alreadyLinked) {
+            // Clear the stored user ID
+            sessionStorage.removeItem('linkingUserId');
             // Refresh the page data after linking
             await fetchData();
             // Update URL to prevent re-linking
             window.history.replaceState({}, '', '/dashboard/pages?linked=true');
+            // Force session refresh to restore original user session
+            window.location.reload();
           }
+        } else {
+          // Clear stored ID on error
+          sessionStorage.removeItem('linkingUserId');
         }
+      } else if (storedUserId) {
+        // Already linked, clear the stored ID
+        sessionStorage.removeItem('linkingUserId');
       }
     } catch (error) {
       console.error('Error linking Facebook account:', error);
+      sessionStorage.removeItem('linkingUserId');
     }
   };
 
@@ -514,7 +533,21 @@ export default function PagesPage() {
                         </p>
                       </div>
                       <button
-                        onClick={() => signIn('facebook', { callbackUrl: '/dashboard/pages' })}
+                        onClick={async () => {
+                          // Store current user ID before OAuth
+                          if (session?.user?.id) {
+                            try {
+                              await fetch('/api/auth/set-linking-user', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ userId: session.user.id }),
+                              });
+                            } catch (error) {
+                              console.error('Error storing linking user:', error);
+                            }
+                          }
+                          await signIn('facebook', { callbackUrl: '/dashboard/pages' });
+                        }}
                         className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

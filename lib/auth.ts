@@ -98,9 +98,19 @@ export const authOptions = {
       // This allows linking regardless of email matching
       return true;
     },
-    async jwt({ token, user }: { token: JWT; user?: User | undefined }) {
+    async jwt({ token, user, account }: { token: JWT; user?: User | undefined; account?: Account | null }) {
       try {
         if (user) {
+          // If we have an existing token with a user ID and this is a Facebook OAuth,
+          // we're linking accounts - preserve the original user ID
+          if (token.id && account?.provider === 'facebook' && user.id !== token.id) {
+            // This is a linking scenario - keep the original user's session
+            // The account will be linked via the link-account API
+            console.log('Preserving original user session during Facebook linking:', token.id);
+            return token; // Keep the original token
+          }
+          
+          // Normal sign-in - update token with new user
           token.id = user.id;
           token.name = user.name;
           token.email = user.email;
@@ -127,9 +137,65 @@ export const authOptions = {
   },
   events: {
     async signIn(message: { user: User; account?: any; profile?: any; isNewUser?: boolean }) {
-      // Account linking will be handled after OAuth completes
-      // by checking the current session and linking to that user
-      // This allows linking regardless of email matching
+      // If this is a Facebook OAuth and a new user was created, try to link to existing user
+      if (message.account?.provider === 'facebook' && message.isNewUser) {
+        try {
+          // Try to get the original user ID from cookie (set before OAuth)
+          // Note: In NextAuth events, we don't have direct access to cookies,
+          // so we'll handle this in the link-account API after redirect
+          // For now, we'll check for recent sessions with non-Facebook accounts
+          const recentSessions = await prisma.session.findMany({
+            where: {
+              expires: {
+                gte: new Date(Date.now() - 10 * 60 * 1000), // Last 10 minutes
+              },
+            },
+            include: {
+              user: {
+                include: {
+                  accounts: true,
+                },
+              },
+            },
+            orderBy: {
+              expires: 'desc',
+            },
+            take: 5,
+          });
+
+          // Find a session user that has non-Facebook accounts (likely the original user)
+          const originalUser = recentSessions.find(
+            (s) => 
+              s.user.id !== message.user.id && 
+              s.user.accounts.some((acc) => acc.provider !== 'facebook')
+          )?.user;
+
+          if (originalUser) {
+            // Link the Facebook account to the original user
+            await prisma.account.updateMany({
+              where: {
+                providerAccountId: message.account.providerAccountId,
+                provider: 'facebook',
+              },
+              data: {
+                userId: originalUser.id,
+              },
+            });
+
+            // Delete the duplicate user created by OAuth
+            try {
+              await prisma.user.delete({
+                where: { id: message.user.id },
+              });
+              console.log(`Linked Facebook account to original user: ${originalUser.email}`);
+            } catch (error) {
+              console.log('Could not delete duplicate user, but account is linked');
+            }
+          }
+        } catch (error) {
+          console.error('Error in signIn event during account linking:', error);
+        }
+      }
       
       // Log successful sign-ins in development
       if (process.env.NODE_ENV === 'development') {
