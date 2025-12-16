@@ -21,6 +21,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
+  connectedPages ConnectedPage[]
 }
 
 model Account {
@@ -55,4 +56,38 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model ConnectedPage {
+  id                String   @id @default(cuid())
+  userId            String
+  pageId            String   // Facebook Page ID
+  pageName          String
+  pageAccessToken   String   // Long-lived access token for the page
+  provider          String   @default("facebook") // "facebook" or "instagram"
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments          Comment[]
+
+  @@unique([userId, pageId, provider])
+}
+
+model Comment {
+  id                String        @id @default(cuid())
+  pageId            String        // Reference to ConnectedPage
+  connectedPage     ConnectedPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  commentId         String        // Facebook comment ID
+  postId            String        // Facebook post ID
+  message           String
+  authorName        String
+  authorId          String
+  createdAt         DateTime      // When comment was created on Facebook
+  fetchedAt         DateTime      @default(now())
+  replied           Boolean       @default(false)
+  replyMessage      String?
+  status            String        @default("pending") // "pending", "replied", "ignored"
+
+  @@unique([pageId, commentId])
+  @@index([pageId, status])
 }
