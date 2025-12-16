@@ -1,0 +1,209 @@
+{
+  "header": {
+    "logo": "My Comments",
+    "howItWorks": "How it Works",
+    "benefits": "Benefits",
+    "signIn": "Sign In"
+  },
+  "hero": {
+    "badge": "AI-Powered Facebook Comment Management",
+    "title": "Automate Facebook Comment Moderation with AI",
+    "description": "Save hours every day. Let AI handle comment replies and moderation for your Facebook Page while you focus on growing your business.",
+    "getStarted": "Get Started",
+    "signIn": "Sign In",
+    "stats": {
+      "automated": "Automated Replies",
+      "saved": "Saved Per Week",
+      "control": "Your Control"
+    }
+  },
+  "howItWorks": {
+    "title": "How It Works",
+    "subtitle": "Get started in minutes with our simple three-step process",
+    "step1": {
+      "title": "Connect Your Page",
+      "description": "Securely link your Facebook Page in just a few clicks. No technical knowledge required.",
+      "time": "Takes 2 minutes"
+    },
+    "step2": {
+      "title": "Configure AI Settings",
+      "description": "Set your preferences for tone, response style, and moderation rules. Customize to match your brand.",
+      "time": "Takes 5 minutes"
+    },
+    "step3": {
+      "title": "Let AI Handle It",
+      "description": "Sit back as AI automatically moderates and replies to comments 24/7 while you stay in control.",
+      "time": "You're all set!"
+    }
+  },
+  "benefits": {
+    "title": "Key Benefits",
+    "subtitle": "Focus on what matters while AI handles the rest",
+    "saveTime": {
+      "title": "Save Time",
+      "description": "Eliminate hours of manual comment management. Reclaim your time for strategic work and growing your business.",
+      "metric": "Save 10+ hours/week"
+    },
+    "protectBrand": {
+      "title": "Protect Brand Image",
+      "description": "Maintain a professional presence with consistent, on-brand responses. Filter inappropriate content automatically.",
+      "metric": "100% brand consistency"
+    },
+    "fastReplies": {
+      "title": "Fast Replies",
+      "description": "Respond to comments instantly, 24/7. Never miss an opportunity to engage with your audience again.",
+      "metric": "Reply in seconds"
+    }
+  },
+  "trust": {
+    "title": "Safe Automation, Full Control",
+    "subtitle": "Your page, your rules. You're always in the driver's seat.",
+    "secure": {
+      "title": "Secure & Private",
+      "description": "Your data is encrypted and never shared. We follow industry-leading security standards."
+    },
+    "control": {
+      "title": "Full Control",
+      "description": "Review, edit, or override any AI response. Pause automation anytime with one click."
+    },
+    "customRules": {
+      "title": "Custom Rules",
+      "description": "Define your own moderation policies, keywords, and response guidelines to match your needs."
+    },
+    "transparency": {
+      "title": "Full Transparency",
+      "description": "See detailed logs of every action. Know exactly what AI is doing on your behalf."
+    }
+  },
+  "cta": {
+    "title": "Ready to automate your comment management?",
+    "subtitle": "Join businesses saving hours every week with AI-powered moderation.",
+    "button": "Create Your Account",
+    "note": "No credit card required • Get started in minutes • Cancel anytime",
+    "badges": {
+      "gdpr": "GDPR Compliant",
+      "encryption": "256-bit Encryption",
+      "uptime": "99.9% Uptime"
+    }
+  },
+  "footer": {
+    "copyright": "© 2025 My Comments",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "contact": "Contact"
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to your account to continue",
+      "email": "Email",
+      "password": "Password",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Enter your password",
+      "rememberMe": "Remember me",
+      "forgotPassword": "Forgot password?",
+      "signInButton": "Sign in",
+      "signingIn": "Signing in...",
+      "orContinueWith": "or",
+      "continueWithGoogle": "Continue with Google",
+      "continueWithFacebook": "Continue with Facebook",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign up",
+      "testCredentials": "Test Credentials:",
+      "testEmail": "Email: test@example.com",
+      "testPassword": "Password: password123"
+    },
+    "register": {
+      "title": "Create your account",
+      "subtitle": "Get started with My Comments today",
+      "fullName": "Full Name",
+      "email": "Email",
+      "password": "Password",
+      "confirmPassword": "Confirm Password",
+      "namePlaceholder": "John Doe",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Create a strong password",
+      "confirmPasswordPlaceholder": "Re-enter your password",
+      "passwordHelper": "Must be at least 8 characters",
+      "agreeToTerms": "I agree to the",
+      "termsOfService": "Terms of Service",
+      "and": "and",
+      "privacyPolicy": "Privacy Policy",
+      "createAccountButton": "Create account",
+      "creatingAccount": "Creating account...",
+      "haveAccount": "Already have an account?",
+      "signIn": "Sign in"
+    },
+    "forgotPassword": {
+      "title": "Forgot password?",
+      "subtitle": "No worries! Enter your email and we'll send you reset instructions.",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "sendResetLink": "Send reset link",
+      "sendingResetLink": "Sending reset link...",
+      "backToLogin": "Back to login",
+      "checkEmail": "Check your email",
+      "emailSent": "We've sent password reset instructions to",
+      "didntReceive": "Didn't receive the email?",
+      "checkSpam": "Check your spam folder",
+      "correctEmail": "Make sure you entered the correct email",
+      "tryAgain": "Try again with a different email"
+    },
+    "resetPassword": {
+      "title": "Reset your password",
+      "subtitle": "Enter your new password below",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm New Password",
+      "passwordPlaceholder": "Create a strong password",
+      "confirmPasswordPlaceholder": "Re-enter your password",
+      "passwordHelper": "Must be at least 8 characters",
+      "resetPasswordButton": "Reset password",
+      "resettingPassword": "Resetting password...",
+      "backToLogin": "Back to login",
+      "success": "Password reset successful!",
+      "redirecting": "Redirecting you to login...",
+      "invalidToken": "Invalid or missing reset token. Please request a new password reset link.",
+      "requestNewLink": "Request new reset link"
+    },
+    "verifyEmail": {
+      "verifying": "Verifying your email",
+      "pleaseWait": "Please wait while we verify your email address...",
+      "verified": "Email verified!",
+      "verificationFailed": "Verification failed",
+      "successMessage": "Your email has been successfully verified. You can now log in to your account.",
+      "continueToLogin": "Continue to login",
+      "failureMessage": "The verification link may have expired or is invalid.",
+      "createNewAccount": "Create a new account",
+      "or": "or",
+      "goToLogin": "Go to login"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome back",
+    "subtitle": "Here's what's happening with your pages today.",
+    "menu": {
+      "dashboard": "Dashboard",
+      "pages": "Pages",
+      "comments": "Comments",
+      "analytics": "Analytics",
+      "settings": "Settings"
+    },
+    "stats": {
+      "commentsModerated": "Comments Moderated",
+      "approvalRate": "Approval Rate",
+      "timeSaved": "Time Saved",
+      "avgResponse": "Avg Response"
+    },
+    "recentActivity": "Recent Activity",
+    "activityItem": "Comment moderated automatically",
+    "timeAgo": "minutes ago",
+    "profile": {
+      "profile": "Profile",
+      "settings": "Settings",
+      "logout": "Logout"
+    },
+    "authStatus": "NextAuth Active",
+    "authMessage": "Real authentication enabled"
+  }
+}
