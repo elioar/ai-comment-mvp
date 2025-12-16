@@ -46,7 +46,7 @@ export async function sendEmail({ to, subject, html }: EmailOptions) {
  * Send email verification email
  */
 export async function sendVerificationEmail(email: string, token: string, name?: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'http://localhost:3000';
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'https://my-comments-rosy.vercel.app';
   const verificationUrl = `${baseUrl}/verify-email?token=${token}`;
 
   const html = `
@@ -57,41 +57,77 @@ export async function sendVerificationEmail(email: string, token: string, name?:
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Verify Your Email</title>
       </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 28px;">Verify Your Email</h1>
-        </div>
-        <div style="background: #f9fafb; padding: 40px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; border-top: none;">
-          <p style="font-size: 16px; margin-bottom: 20px;">
-            ${name ? `Hi ${name},` : 'Hi there,'}
-          </p>
-          <p style="font-size: 16px; margin-bottom: 20px;">
-            Thank you for signing up! Please verify your email address by clicking the button below:
-          </p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${verificationUrl}" 
-               style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-              Verify Email Address
-            </a>
-          </div>
-          <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
-            Or copy and paste this link into your browser:
-          </p>
-          <p style="font-size: 12px; color: #9ca3af; word-break: break-all; background: #f3f4f6; padding: 10px; border-radius: 4px;">
-            ${verificationUrl}
-          </p>
-          <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
-            This link will expire in 24 hours.
-          </p>
-          <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
-            If you didn't create an account, you can safely ignore this email.
-          </p>
-        </div>
-        <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-          <p style="font-size: 12px; color: #9ca3af;">
-            © ${new Date().getFullYear()} AI Comment Replyer. All rights reserved.
-          </p>
-        </div>
+      <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; padding: 40px 20px;">
+          <tr>
+            <td align="center">
+              <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+                
+                <!-- Header with logo/icon -->
+                <tr>
+                  <td style="padding: 48px 40px 32px; text-align: center;">
+                    <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); border-radius: 16px; margin: 0 auto 24px; display: inline-flex; align-items: center; justify-content: center;">
+                      <span style="font-size: 32px; color: white;">✉️</span>
+                    </div>
+                    <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #0f172a; letter-spacing: -0.5px;">
+                      Verify Your Email
+                    </h1>
+                  </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 0 40px 40px;">
+                    <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.6; color: #475569;">
+                      ${name ? `Hi <strong>${name}</strong>,` : 'Hi there,'}
+                    </p>
+                    <p style="margin: 0 0 32px; font-size: 16px; line-height: 1.6; color: #475569;">
+                      Welcome to My Comments! Click the button below to verify your email and start automating your Facebook comments.
+                    </p>
+                    
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center" style="padding: 0 0 32px;">
+                          <a href="${verificationUrl}" 
+                             style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff; padding: 16px 40px; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.3);">
+                            Verify Email →
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Divider -->
+                    <div style="border-top: 1px solid #e2e8f0; margin: 32px 0;"></div>
+
+                    <!-- Alternative link -->
+                    <p style="margin: 0 0 12px; font-size: 13px; color: #64748b;">
+                      Or copy and paste this link:
+                    </p>
+                    <p style="margin: 0 0 24px; font-size: 12px; color: #94a3b8; word-break: break-all; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                      ${verificationUrl}
+                    </p>
+
+                    <!-- Info text -->
+                    <p style="margin: 0; font-size: 13px; color: #94a3b8; line-height: 1.5;">
+                      This link expires in 24 hours. If you didn't create this account, you can safely ignore this email.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="padding: 32px 40px; background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <p style="margin: 0; text-align: center; font-size: 12px; color: #94a3b8;">
+                      © ${new Date().getFullYear()} My Comments. All rights reserved.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `;
@@ -107,7 +143,7 @@ export async function sendVerificationEmail(email: string, token: string, name?:
  * Send password reset email
  */
 export async function sendPasswordResetEmail(email: string, token: string, name?: string) {
-  const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'http://localhost:3000';
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'https://my-comments-rosy.vercel.app';
   const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
   const html = `
@@ -118,41 +154,77 @@ export async function sendPasswordResetEmail(email: string, token: string, name?
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Reset Your Password</title>
       </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 28px;">Reset Your Password</h1>
-        </div>
-        <div style="background: #f9fafb; padding: 40px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; border-top: none;">
-          <p style="font-size: 16px; margin-bottom: 20px;">
-            ${name ? `Hi ${name},` : 'Hi there,'}
-          </p>
-          <p style="font-size: 16px; margin-bottom: 20px;">
-            We received a request to reset your password. Click the button below to create a new password:
-          </p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetUrl}" 
-               style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-              Reset Password
-            </a>
-          </div>
-          <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
-            Or copy and paste this link into your browser:
-          </p>
-          <p style="font-size: 12px; color: #9ca3af; word-break: break-all; background: #f3f4f6; padding: 10px; border-radius: 4px;">
-            ${resetUrl}
-          </p>
-          <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
-            This link will expire in 1 hour.
-          </p>
-          <p style="font-size: 14px; color: #6b7280; margin-top: 20px;">
-            If you didn't request a password reset, you can safely ignore this email.
-          </p>
-        </div>
-        <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-          <p style="font-size: 12px; color: #9ca3af;">
-            © ${new Date().getFullYear()} AI Comment Replyer. All rights reserved.
-          </p>
-        </div>
+      <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; padding: 40px 20px;">
+          <tr>
+            <td align="center">
+              <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+                
+                <!-- Header with logo/icon -->
+                <tr>
+                  <td style="padding: 48px 40px 32px; text-align: center;">
+                    <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); border-radius: 16px; margin: 0 auto 24px; display: inline-flex; align-items: center; justify-content: center;">
+                      <span style="font-size: 32px; color: white;">🔐</span>
+                    </div>
+                    <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #0f172a; letter-spacing: -0.5px;">
+                      Reset Your Password
+                    </h1>
+                  </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                  <td style="padding: 0 40px 40px;">
+                    <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.6; color: #475569;">
+                      ${name ? `Hi <strong>${name}</strong>,` : 'Hi there,'}
+                    </p>
+                    <p style="margin: 0 0 32px; font-size: 16px; line-height: 1.6; color: #475569;">
+                      We received a request to reset your password. Click the button below to create a new password for your account.
+                    </p>
+                    
+                    <!-- CTA Button -->
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center" style="padding: 0 0 32px;">
+                          <a href="${resetUrl}" 
+                             style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff; padding: 16px 40px; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.3);">
+                            Reset Password →
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Divider -->
+                    <div style="border-top: 1px solid #e2e8f0; margin: 32px 0;"></div>
+
+                    <!-- Alternative link -->
+                    <p style="margin: 0 0 12px; font-size: 13px; color: #64748b;">
+                      Or copy and paste this link:
+                    </p>
+                    <p style="margin: 0 0 24px; font-size: 12px; color: #94a3b8; word-break: break-all; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                      ${resetUrl}
+                    </p>
+
+                    <!-- Info text -->
+                    <p style="margin: 0; font-size: 13px; color: #94a3b8; line-height: 1.5;">
+                      This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="padding: 32px 40px; background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <p style="margin: 0; text-align: center; font-size: 12px; color: #94a3b8;">
+                      © ${new Date().getFullYear()} My Comments. All rights reserved.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `;
