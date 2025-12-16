@@ -93,6 +93,147 @@
     "terms": "Terms of Service",
     "contact": "Contact"
   },
+  "landing": {
+    "logo": "AI Comment Replyer",
+    "badge": "AI-Powered Comment Management",
+    "titleLine1": "Never Miss a",
+    "titleLine2": "Comment Again",
+    "subtitle": "Automate your social media responses with AI that understands your brand. Reply to comments instantly, 24/7, with personalized messages that sound like you.",
+    "startFreeTrial": "Start Free Trial",
+    "watchDemo": "Watch Demo",
+    "stats": {
+      "automated": "Automated Replies",
+      "saved": "Saved Per Week",
+      "consistent": "Brand Consistent"
+    },
+    "socialProof": {
+      "title": "Trusted by Leading Brands"
+    },
+    "features": {
+      "title": "Everything You Need",
+      "subtitle": "Powerful features designed to save you time and protect your brand reputation",
+      "lightningFast": {
+        "title": "Lightning Fast",
+        "description": "Respond to comments in seconds, not hours. AI-powered replies that sound natural and on-brand."
+      },
+      "brandSafe": {
+        "title": "Brand Safe",
+        "description": "Advanced AI ensures every response aligns with your brand voice and values. Full control, zero risk."
+      },
+      "customizable": {
+        "title": "Customizable",
+        "description": "Set custom rules, tone preferences, and response templates. Make it work exactly how you want."
+      },
+      "analytics": {
+        "title": "Analytics Dashboard",
+        "description": "Track response times, engagement rates, and customer satisfaction. Make data-driven decisions."
+      },
+      "monitoring": {
+        "title": "24/7 Monitoring",
+        "description": "Never miss a comment, even when you're asleep. Our AI works around the clock to keep customers engaged."
+      },
+      "security": {
+        "title": "Enterprise Security",
+        "description": "End-to-end encryption, GDPR compliant, SOC 2 certified. Your data is always protected."
+      }
+    },
+    "metrics": {
+      "responseRate": "Response Rate",
+      "commentsProcessed": "Comments Processed",
+      "avgResponseTime": "Avg Response Time",
+      "uptimeSLA": "Uptime SLA"
+    },
+    "pricing": {
+      "title": "Simple, Transparent Pricing",
+      "subtitle": "Choose the plan that fits your needs. All plans include a 14-day free trial.",
+      "mostPopular": "Most Popular",
+      "starter": {
+        "name": "Starter",
+        "price": "$29",
+        "period": "/month",
+        "feature1": "Up to 1,000 comments/month",
+        "feature2": "Basic AI responses",
+        "feature3": "1 social media account",
+        "feature4": "Email support",
+        "cta": "Get Started"
+      },
+      "pro": {
+        "name": "Pro",
+        "price": "$79",
+        "period": "/month",
+        "feature1": "Up to 10,000 comments/month",
+        "feature2": "Advanced AI with custom rules",
+        "feature3": "Up to 5 social media accounts",
+        "feature4": "Priority support",
+        "feature5": "Analytics dashboard",
+        "cta": "Get Started"
+      },
+      "enterprise": {
+        "name": "Enterprise",
+        "price": "Custom",
+        "feature1": "Unlimited comments",
+        "feature2": "Custom AI training",
+        "feature3": "Unlimited accounts",
+        "feature4": "Dedicated account manager",
+        "feature5": "SLA guarantee",
+        "cta": "Contact Sales"
+      }
+    },
+    "testimonials": {
+      "title": "Loved by Teams Worldwide",
+      "subtitle": "See what our customers have to say about their experience",
+      "testimonial1": {
+        "quote": "This tool has completely transformed how we handle customer engagement. Response times dropped from hours to seconds, and our customer satisfaction scores have never been higher.",
+        "name": "Sarah Johnson",
+        "role": "Marketing Director, TechCorp"
+      },
+      "testimonial2": {
+        "quote": "As a small team, we couldn't afford to miss comments. AI Comment Replyer allows us to compete with much larger companies by being responsive 24/7. Game changer!",
+        "name": "Michael Chen",
+        "role": "Founder, StartupXYZ"
+      },
+      "testimonial3": {
+        "quote": "The custom rules and brand voice training are incredible. Every response sounds like it came from our team, but we're getting 10x more engagement. Highly recommended!",
+        "name": "Emma Rodriguez",
+        "role": "Social Media Manager, BrandCo"
+      }
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "subtitle": "Everything you need to know about AI Comment Replyer",
+      "q1": "How does AI comment reply work?",
+      "a1": "Our AI analyzes incoming comments and generates contextual, brand-aligned responses in seconds. You can customize tone, style, and approve responses before they go live.",
+      "q2": "Which platforms do you support?",
+      "a2": "Currently, we support Facebook Pages and Instagram. We're continuously expanding to other social media platforms based on user demand.",
+      "q3": "Is my data secure?",
+      "a3": "Absolutely. We use enterprise-grade encryption, comply with GDPR standards, and never share your data with third parties. Your account and comments are fully protected.",
+      "q4": "Can I customize the AI responses?",
+      "a4": "Yes! You can set custom rules, tone preferences, response templates, and approval workflows. The AI learns from your brand voice and improves over time.",
+      "q5": "What happens if the AI makes a mistake?",
+      "a5": "All responses can be set to require manual approval before posting. You can also edit, reject, or provide feedback on any generated response to help the AI learn."
+    },
+    "finalCta": {
+      "title": "Ready to Get Started?",
+      "subtitle": "Join thousands of businesses automating their comment management. Start your free 14-day trial today.",
+      "button": "Start Free Trial"
+    },
+    "navigation": {
+      "features": "Features",
+      "pricing": "Pricing",
+      "testimonials": "Testimonials"
+    },
+    "footer": {
+      "description": "Automate your social media responses with AI that understands your brand.",
+      "product": "Product",
+      "company": "Company",
+      "legal": "Legal",
+      "documentation": "Documentation",
+      "api": "API",
+      "about": "About",
+      "blog": "Blog",
+      "careers": "Careers"
+    }
+  },
   "auth": {
     "login": {
       "title": "Welcome back",
