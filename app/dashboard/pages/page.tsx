@@ -11,6 +11,17 @@ interface FacebookPage {
   id: string;
   name: string;
   access_token: string;
+  provider?: string;
+}
+
+interface InstagramPage {
+  id: string;
+  username: string;
+  name: string;
+  profile_picture_url?: string;
+  access_token: string;
+  facebook_page_id: string;
+  provider?: string;
 }
 
 interface ConnectedPage {
@@ -31,6 +42,7 @@ export default function PagesPage() {
   const [currentLanguage, setCurrentLanguage] = useState<string>('en');
   const [mounted, setMounted] = useState(false);
   const [pages, setPages] = useState<FacebookPage[]>([]);
+  const [instagramPages, setInstagramPages] = useState<InstagramPage[]>([]);
   const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
@@ -93,8 +105,8 @@ export default function PagesPage() {
             await fetchData();
             // Update URL to prevent re-linking
             window.history.replaceState({}, '', '/dashboard/pages?linked=true');
-            // Force session refresh to restore original user session
-            window.location.reload();
+            // Refresh data to show updated pages
+            await fetchData();
           }
         } else {
           // Clear stored ID on error
@@ -118,6 +130,7 @@ export default function PagesPage() {
       if (response.ok) {
         const data = await response.json();
         setPages(data.pages || []);
+        setInstagramPages(data.instagramPages || []);
         setConnectedPages(data.connectedPages || []);
         if (data.error) {
           setError(data.error);
@@ -133,10 +146,11 @@ export default function PagesPage() {
     }
   };
 
-  const connectPage = async (page: FacebookPage) => {
+  const connectPage = async (page: FacebookPage | InstagramPage, provider: 'facebook' | 'instagram' = 'facebook') => {
     setConnecting(page.id);
     setError(null);
     try {
+      const pageName = 'name' in page ? page.name : page.username;
       const response = await fetch('/api/facebook/pages', {
         method: 'POST',
         headers: {
@@ -144,9 +158,9 @@ export default function PagesPage() {
         },
         body: JSON.stringify({
           pageId: page.id,
-          pageName: page.name,
+          pageName: pageName,
           pageAccessToken: page.access_token,
-          provider: 'facebook',
+          provider: provider,
         }),
       });
 
@@ -165,10 +179,6 @@ export default function PagesPage() {
   };
 
   const disconnectPage = async (pageId: string, provider: string = 'facebook') => {
-    if (!confirm('Are you sure you want to disconnect this page? All comments data for this page will be removed.')) {
-      return;
-    }
-
     setDisconnecting(pageId);
     setError(null);
     try {
@@ -314,9 +324,9 @@ export default function PagesPage() {
     return null;
   }
 
-  const isPageConnected = (pageId: string) => {
-    return connectedPages.some((cp) => cp.pageId === pageId);
-  };
+      const isPageConnected = (pageId: string, provider: string = 'facebook') => {
+        return connectedPages.some((cp) => cp.pageId === pageId && cp.provider === provider);
+      };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black">
@@ -442,12 +452,6 @@ export default function PagesPage() {
 
         <main className="min-h-[calc(100vh-80px)] p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
-            <div className="mb-8">
-              <p className="text-gray-600 dark:text-gray-400">
-                {t('dashboard.pages.description') || 'Connect your Facebook pages to manage comments'}
-              </p>
-            </div>
-
             {error && (
               <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                 <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
@@ -458,147 +462,274 @@ export default function PagesPage() {
               <div className="flex items-center justify-center py-12">
                 <div className="w-12 h-12 border-4 border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin"></div>
               </div>
+            ) : pages.length === 0 ? (
+              <div className="max-w-2xl mx-auto">
+                <div className="bg-white dark:bg-gray-950 rounded-2xl border border-gray-200 dark:border-gray-800 p-12 text-center shadow-sm">
+                  <div className="mb-6">
+                    <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-10 h-10 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                      </svg>
+                    </div>
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                          Connect Your Facebook & Instagram Pages
+                        </h2>
+                        <p className="text-gray-600 dark:text-gray-400 mb-2">
+                          {t('dashboard.pages.description')}
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-500 mb-6">
+                          Make sure you have admin access to the Facebook pages and Instagram Business accounts you want to connect.
+                        </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      // Store current user ID before OAuth
+                      if (session?.user?.id) {
+                        try {
+                          await fetch('/api/auth/set-linking-user', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: session.user.id }),
+                          });
+                        } catch (error) {
+                          console.error('Error storing linking user:', error);
+                        }
+                      }
+                      await signIn('facebook', { callbackUrl: '/dashboard/pages' });
+                    }}
+                    className="inline-flex items-center gap-3 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-base shadow-md hover:shadow-lg"
+                  >
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                    </svg>
+                    Connect Facebook Account
+                  </button>
+                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-4">
+                    Your Facebook account will be linked to your current account ({session?.user?.email})
+                  </p>
+                </div>
+              </div>
             ) : (
-              <>
-                {connectedPages.length > 0 && (
-                  <div className="mb-8">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                      Your Connected Pages
-                    </h2>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {connectedPages.map((page) => (
+              <div>
+                <div className="mb-6">
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                    Your Pages
+                  </h1>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {t('dashboard.pages.description')}
+                  </p>
+                </div>
+
+                {(pages.length > 0 || instagramPages.length > 0) && (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {/* Facebook Pages */}
+                    {pages.map((page) => {
+                      const isConnected = isPageConnected(page.id, 'facebook');
+                      const isProcessing = connecting === page.id || disconnecting === page.id;
+                      
+                      return (
                         <div
-                          key={page.id}
-                          className="bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 p-6"
+                          key={`fb-${page.id}`}
+                          className={`bg-white dark:bg-gray-950 rounded-xl border ${
+                            isConnected 
+                              ? 'border-blue-200 dark:border-blue-900' 
+                              : 'border-gray-200 dark:border-gray-800'
+                          } p-6 hover:shadow-lg transition-all`}
                         >
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md ${
+                                isConnected 
+                                  ? 'bg-blue-600' 
+                                  : 'bg-gray-400 dark:bg-gray-700'
+                              }`}>
+                                <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
                                   <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                                 </svg>
                               </div>
-                              <div>
-                                <h3 className="font-semibold text-gray-900 dark:text-white">{page.pageName}</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">{page.provider}</p>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-gray-900 dark:text-white text-lg truncate">
+                                  {page.name}
+                                </h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  Facebook Page
+                                </p>
                               </div>
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <Link
-                              href={`/dashboard/comments?pageId=${page.pageId}`}
-                              className="flex-1 text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                            >
-                              View Comments
-                            </Link>
-                            <button
-                              onClick={() => disconnectPage(page.pageId, page.provider)}
-                              disabled={disconnecting === page.pageId}
-                              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center"
-                              title="Disconnect page"
-                            >
-                              {disconnecting === page.pageId ? (
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                              ) : (
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              )}
-                            </button>
+
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 flex-1">
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isConnected}
+                                  onChange={() => {
+                                    if (isConnected) {
+                                      disconnectPage(page.id, 'facebook');
+                                    } else {
+                                      connectPage(page, 'facebook');
+                                    }
+                                  }}
+                                  disabled={isProcessing}
+                                  className="sr-only peer"
+                                />
+                                <div className={`
+                                  relative w-11 h-6 rounded-full transition-all duration-300 ease-in-out
+                                  ${isConnected 
+                                    ? 'bg-blue-600 dark:bg-blue-500' 
+                                    : 'bg-gray-300 dark:bg-gray-600'
+                                  }
+                                  ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                                  peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800
+                                `}>
+                                  <div className={`
+                                    absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-lg
+                                    transform transition-transform duration-300 ease-in-out
+                                    ${isConnected ? 'translate-x-5' : 'translate-x-0'}
+                                  `} />
+                                </div>
+                              </label>
+                              <span className={`text-sm font-medium ${
+                                isProcessing
+                                  ? 'text-gray-500 dark:text-gray-500'
+                                  : isConnected
+                                  ? 'text-blue-600 dark:text-blue-400'
+                                  : 'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {isProcessing 
+                                  ? (isConnected ? 'Disconnecting...' : 'Connecting...')
+                                  : (isConnected ? 'Connected' : 'Disconnected')
+                                }
+                              </span>
+                            </div>
+                            
+                            {isConnected && (
+                              <Link
+                                href={`/dashboard/comments?pageId=${page.id}&provider=facebook`}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-sm whitespace-nowrap"
+                              >
+                                View Comments
+                              </Link>
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
+
+                    {/* Instagram Pages */}
+                    {instagramPages.map((page) => {
+                      const isConnected = isPageConnected(page.id, 'instagram');
+                      const isProcessing = connecting === page.id || disconnecting === page.id;
+                      
+                      return (
+                        <div
+                          key={`ig-${page.id}`}
+                          className={`bg-white dark:bg-gray-950 rounded-xl border ${
+                            isConnected 
+                              ? 'border-pink-200 dark:border-pink-900' 
+                              : 'border-gray-200 dark:border-gray-800'
+                          } p-6 hover:shadow-lg transition-all`}
+                        >
+                          <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md overflow-hidden ${
+                                isConnected 
+                                  ? 'bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500' 
+                                  : 'bg-gray-400 dark:bg-gray-700'
+                              }`}>
+                                {page.profile_picture_url && isConnected ? (
+                                  <img 
+                                    src={page.profile_picture_url} 
+                                    alt={page.username}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-gray-900 dark:text-white text-lg truncate">
+                                  {page.name || page.username}
+                                </h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  Instagram Account
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 flex-1">
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isConnected}
+                                  onChange={() => {
+                                    if (isConnected) {
+                                      disconnectPage(page.id, 'instagram');
+                                    } else {
+                                      connectPage(page, 'instagram');
+                                    }
+                                  }}
+                                  disabled={isProcessing}
+                                  className="sr-only peer"
+                                />
+                                <div className={`
+                                  relative w-11 h-6 rounded-full transition-all duration-300 ease-in-out
+                                  ${isConnected 
+                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-500 dark:to-pink-500' 
+                                    : 'bg-gray-300 dark:bg-gray-600'
+                                  }
+                                  ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                                  peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-pink-300 dark:peer-focus:ring-pink-800
+                                `}>
+                                  <div className={`
+                                    absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-lg
+                                    transform transition-transform duration-300 ease-in-out
+                                    ${isConnected ? 'translate-x-5' : 'translate-x-0'}
+                                  `} />
+                                </div>
+                              </label>
+                              <span className={`text-sm font-medium ${
+                                isProcessing
+                                  ? 'text-gray-500 dark:text-gray-500'
+                                  : isConnected
+                                  ? 'text-pink-600 dark:text-pink-400'
+                                  : 'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {isProcessing 
+                                  ? (isConnected ? 'Disconnecting...' : 'Connecting...')
+                                  : (isConnected ? 'Connected' : 'Disconnected')
+                                }
+                              </span>
+                            </div>
+                            
+                            {isConnected && (
+                              <Link
+                                href={`/dashboard/comments?pageId=${page.id}&provider=instagram`}
+                                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-colors font-medium text-sm whitespace-nowrap"
+                              >
+                                View Comments
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                    Available Facebook Pages
-                  </h2>
-                  {pages.length === 0 ? (
-                    <div className="bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 p-8 text-center">
-                      <div className="mb-4">
-                        <svg className="w-16 h-16 mx-auto mb-4 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                          Connect Your Facebook Account
-                        </h3>
-                        <p className="text-gray-600 dark:text-gray-400 mb-2">
-                          Link your Facebook account to access and manage your Facebook pages.
-                        </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-500 mb-4">
-                          Make sure you have admin access to the pages you want to connect.
-                        </p>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          // Store current user ID before OAuth
-                          if (session?.user?.id) {
-                            try {
-                              await fetch('/api/auth/set-linking-user', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ userId: session.user.id }),
-                              });
-                            } catch (error) {
-                              console.error('Error storing linking user:', error);
-                            }
-                          }
-                          await signIn('facebook', { callbackUrl: '/dashboard/pages' });
-                        }}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-                      >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                        </svg>
-                        Connect Facebook Account
-                      </button>
-                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-4">
-                        Your Facebook account will be linked to your current account ({session?.user?.email})
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {pages.map((page) => (
-                        <div
-                          key={page.id}
-                          className="bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 p-6"
-                        >
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                              </svg>
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-gray-900 dark:text-white">{page.name}</h3>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">Facebook Page</p>
-                            </div>
-                          </div>
-                          {isPageConnected(page.id) ? (
-                            <button
-                              disabled
-                              className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg cursor-not-allowed"
-                            >
-                              Connected
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => connectPage(page)}
-                              disabled={connecting === page.id}
-                              className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              {connecting === page.id ? 'Connecting...' : 'Connect Page'}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
+                {pages.length === 0 && instagramPages.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No pages found. Make sure your Facebook account has pages or Instagram Business accounts connected.
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </main>

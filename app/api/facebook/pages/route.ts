@@ -44,25 +44,74 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch user's Facebook pages
-    const response = await fetch(
+    const pagesResponse = await fetch(
       `https://graph.facebook.com/v18.0/me/accounts?access_token=${account.access_token}&fields=id,name,access_token`
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    if (!pagesResponse.ok) {
+      const errorText = await pagesResponse.text();
       console.error('Facebook API error:', errorText);
       return NextResponse.json({
         connectedPages,
         pages: [],
+        instagramPages: [],
         error: 'Failed to fetch pages from Facebook',
       });
     }
 
-    const data = await response.json();
+    const pagesData = await pagesResponse.json();
+    const facebookPages = pagesData.data || [];
+
+    // Fetch Instagram Business accounts for each Facebook page
+    const instagramPages: any[] = [];
+    
+    for (const page of facebookPages) {
+      try {
+        // Check if this page has an Instagram Business account
+        const instagramAccountResponse = await fetch(
+          `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
+        );
+
+        if (instagramAccountResponse.ok) {
+          const instagramAccountData = await instagramAccountResponse.json();
+          
+          if (instagramAccountData.instagram_business_account?.id) {
+            const instagramAccountId = instagramAccountData.instagram_business_account.id;
+            
+            // Get Instagram account details
+            const instagramDetailsResponse = await fetch(
+              `https://graph.facebook.com/v18.0/${instagramAccountId}?fields=id,username,name,profile_picture_url&access_token=${page.access_token}`
+            );
+
+            if (instagramDetailsResponse.ok) {
+              const instagramDetails = await instagramDetailsResponse.json();
+              instagramPages.push({
+                id: instagramDetails.id,
+                username: instagramDetails.username || instagramDetails.name || `Instagram ${instagramDetails.id}`,
+                name: instagramDetails.name || instagramDetails.username || `Instagram ${instagramDetails.id}`,
+                profile_picture_url: instagramDetails.profile_picture_url,
+                access_token: page.access_token, // Use the page access token
+                facebook_page_id: page.id, // Store the parent Facebook page ID
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching Instagram account for page ${page.id}:`, error);
+        // Continue with other pages even if one fails
+      }
+    }
     
     return NextResponse.json({
       connectedPages,
-      pages: data.data || [],
+      pages: facebookPages.map((page: any) => ({
+        ...page,
+        provider: 'facebook',
+      })),
+      instagramPages: instagramPages.map((page: any) => ({
+        ...page,
+        provider: 'instagram',
+      })),
     });
   } catch (error) {
     console.error('Error fetching Facebook pages:', error);

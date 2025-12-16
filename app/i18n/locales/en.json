@@ -439,6 +439,9 @@
       "theme": "Theme",
       "lightMode": "Light Mode",
       "darkMode": "Dark Mode"
+    },
+    "pages": {
+      "description": "Connect and manage your Facebook pages. Select which pages you want to monitor and respond to comments automatically."
     }
   }
 }

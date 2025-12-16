@@ -80,7 +80,7 @@ export const authOptions = {
                 allowDangerousEmailAccountLinking: true, // Allow linking accounts with same email
                 authorization: {
                   params: {
-                    scope: 'pages_read_engagement pages_show_list pages_manage_posts',
+                    scope: 'pages_read_engagement pages_show_list pages_manage_posts instagram_basic instagram_manage_comments',
                   },
                 },
               }),
