@@ -61,8 +61,35 @@ export default function PagesPage() {
   useEffect(() => {
     if (session) {
       fetchData();
+      // After OAuth redirect, try to link Facebook account to current user
+      linkFacebookAccount();
     }
   }, [session]);
+
+  const linkFacebookAccount = async () => {
+    try {
+      // Check if we just came back from Facebook OAuth
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('linked') !== 'true') {
+        // Try to link any unlinked Facebook account to current user
+        const response = await fetch('/api/facebook/link-account', {
+          method: 'POST',
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && !data.alreadyLinked) {
+            // Refresh the page data after linking
+            await fetchData();
+            // Update URL to prevent re-linking
+            window.history.replaceState({}, '', '/dashboard/pages?linked=true');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error linking Facebook account:', error);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);

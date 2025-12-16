@@ -93,57 +93,9 @@ export const authOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }: { user: User; account?: Account | null; profile?: Profile }) {
-      // Handle account linking for OAuth providers
-      if (account && account.provider !== 'credentials' && user.email) {
-        try {
-          // Find existing user with same email
-          const existingUser = await prisma.user.findUnique({
-            where: { email: user.email },
-            include: { accounts: true },
-          });
-
-          // If user exists and it's a different user (OAuth might create new user)
-          if (existingUser && existingUser.id !== user.id) {
-            // Check if this provider account is already linked to existing user
-            const existingAccount = await prisma.account.findFirst({
-              where: {
-                userId: existingUser.id,
-                provider: account.provider,
-                providerAccountId: account.providerAccountId,
-              },
-            });
-
-            // If not linked, link it
-            if (!existingAccount) {
-              // Update the OAuth account to point to existing user
-              await prisma.account.updateMany({
-                where: {
-                  providerAccountId: account.providerAccountId,
-                  provider: account.provider,
-                },
-                data: {
-                  userId: existingUser.id,
-                },
-              });
-
-              // Delete the duplicate user created by OAuth if it exists
-              try {
-                await prisma.user.delete({
-                  where: { id: user.id },
-                });
-              } catch (deleteError) {
-                // User might not exist yet, that's okay
-                console.log('User to delete not found, continuing...');
-              }
-
-              console.log(`Linked ${account.provider} account to existing user:`, existingUser.email);
-            }
-          }
-        } catch (error) {
-          console.error('Error in signIn callback during account linking:', error);
-          // Still allow sign-in to continue
-        }
-      }
+      // Always return true to allow sign-in
+      // We'll link the Facebook account to the current logged-in user after OAuth completes
+      // This allows linking regardless of email matching
       return true;
     },
     async jwt({ token, user }: { token: JWT; user?: User | undefined }) {
@@ -175,57 +127,17 @@ export const authOptions = {
   },
   events: {
     async signIn(message: { user: User; account?: any; profile?: any; isNewUser?: boolean }) {
-      // Link OAuth account to existing user account by email
-      if (message.account && message.account.provider !== 'credentials' && message.user.email) {
-        try {
-          // Find existing user with same email
-          const existingUser = await prisma.user.findUnique({
-            where: { email: message.user.email },
-            include: { accounts: true },
-          });
-
-          // If user exists and it's a different user (OAuth created new user)
-          if (existingUser && existingUser.id !== message.user.id) {
-            // Check if Facebook account is already linked to existing user
-            const existingFacebookAccount = await prisma.account.findFirst({
-              where: {
-                userId: existingUser.id,
-                provider: 'facebook',
-              },
-            });
-
-            // If not linked, link it
-            if (!existingFacebookAccount) {
-              // Update the OAuth account to point to existing user
-              await prisma.account.updateMany({
-                where: {
-                  providerAccountId: message.account.providerAccountId,
-                  provider: message.account.provider,
-                },
-                data: {
-                  userId: existingUser.id,
-                },
-              });
-
-              // Delete the duplicate user created by OAuth
-              await prisma.user.delete({
-                where: { id: message.user.id },
-              });
-
-              console.log('Linked Facebook account to existing user:', existingUser.email);
-            }
-          }
-        } catch (error) {
-          console.error('Error linking accounts:', error);
-        }
-      }
-
+      // Account linking will be handled after OAuth completes
+      // by checking the current session and linking to that user
+      // This allows linking regardless of email matching
+      
       // Log successful sign-ins in development
       if (process.env.NODE_ENV === 'development') {
         console.log('Sign in successful:', { 
           userId: message.user.id, 
           email: message.user.email, 
-          isNewUser: message.isNewUser 
+          isNewUser: message.isNewUser,
+          provider: message.account?.provider
         });
       }
     },
