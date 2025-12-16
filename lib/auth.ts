@@ -3,7 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import FacebookProvider from 'next-auth/providers/facebook';
 import type { JWT } from 'next-auth/jwt';
-import type { Session, User } from 'next-auth';
+import type { Session, User, Account, Profile } from 'next-auth';
 import { prisma } from './prisma';
 import bcrypt from 'bcryptjs';
 
@@ -91,7 +91,7 @@ export const authOptions = {
     error: '/login',
   },
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }: { user: User; account?: Account | null; profile?: Profile }) {
       // The PrismaAdapter automatically links accounts by email
       // This callback ensures the linking works correctly
       if (account && account.provider !== 'credentials' && user.email) {
