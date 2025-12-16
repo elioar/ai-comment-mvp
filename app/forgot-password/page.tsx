@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useTranslation } from 'react-i18next';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -10,11 +11,17 @@ import { FormField } from '@/components/ui/FormField';
 import { authFunctions } from '@/lib/authFunctions';
 
 export default function ForgotPasswordPage() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [errors, setErrors] = useState<{ email?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [alertMessage, setAlertMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -25,9 +32,9 @@ export default function ForgotPasswordPage() {
     const newErrors: { email?: string } = {};
 
     if (!email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = t('auth.login.emailRequired');
     } else if (!validateEmail(email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = t('auth.login.invalidEmail');
     }
 
     setErrors(newErrors);
@@ -48,18 +55,22 @@ export default function ForgotPasswordPage() {
       const response = await authFunctions.requestPasswordReset(email);
       setAlertMessage({
         type: 'success',
-        message: response.message || 'If an account with that email exists, we sent a password reset link.',
+        message: response.message || t('auth.forgotPassword.emailSent'),
       });
       setIsSuccess(true);
     } catch (error) {
       setAlertMessage({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to send reset link. Please try again.',
+        message: error instanceof Error ? error.message : t('auth.forgotPassword.tryAgain'),
       });
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <AuthLayout>
@@ -70,8 +81,8 @@ export default function ForgotPasswordPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Forgot password?</h1>
-          <p className="text-gray-600 dark:text-gray-300">No worries! Enter your email and we'll send you reset instructions.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{t('auth.forgotPassword.title')}</h1>
+          <p className="text-gray-600 dark:text-gray-300">{t('auth.forgotPassword.subtitle')}</p>
         </div>
 
         {alertMessage && (
@@ -88,9 +99,9 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <FormField>
               <Input
-                label="Email"
+                label={t('auth.forgotPassword.email')}
                 type="email"
-                placeholder="you@example.com"
+                placeholder={t('auth.forgotPassword.emailPlaceholder')}
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
@@ -102,7 +113,7 @@ export default function ForgotPasswordPage() {
             </FormField>
 
             <Button type="submit" isLoading={isLoading} className="w-full">
-              {isLoading ? 'Sending reset link...' : 'Send reset link'}
+              {isLoading ? t('auth.forgotPassword.sendingResetLink') : t('auth.forgotPassword.sendResetLink')}
             </Button>
 
             <div className="text-center">
@@ -110,7 +121,7 @@ export default function ForgotPasswordPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back to login
+                {t('auth.forgotPassword.backToLogin')}
               </Link>
             </div>
           </form>
@@ -122,16 +133,16 @@ export default function ForgotPasswordPage() {
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Check your email</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('auth.forgotPassword.checkEmail')}</h3>
               <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">
-                We've sent password reset instructions to <strong className="text-gray-900 dark:text-white">{email}</strong>
+                {t('auth.forgotPassword.emailSent')} <strong className="text-gray-900 dark:text-white">{email}</strong>
               </p>
             </div>
             <Link
               href="/login"
               className="inline-block text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium text-sm transition-colors"
             >
-              Back to login
+              {t('auth.forgotPassword.backToLogin')}
             </Link>
           </div>
         )}

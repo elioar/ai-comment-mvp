@@ -17,13 +17,22 @@ i18n
         translation: el
       }
     },
-    lng: 'en', // Set default language explicitly
     fallbackLng: 'en',
     interpolation: {
       escapeValue: false
     },
     react: {
       useSuspense: false // Prevent hydration issues
+    },
+    detection: {
+      // Order of language detection
+      order: ['localStorage', 'navigator', 'htmlTag'],
+      // Keys to lookup language from
+      lookupLocalStorage: 'i18nextLng',
+      // Cache user language
+      caches: ['localStorage'],
+      // Don't check for cookie support
+      checkWhitelist: true
     }
   });
 

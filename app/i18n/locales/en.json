@@ -1,6 +1,7 @@
 {
   "header": {
     "logo": "My Comments",
+    "navigation": "Navigation",
     "howItWorks": "How it Works",
     "benefits": "Benefits",
     "signIn": "Sign In"
@@ -104,14 +105,21 @@
       "forgotPassword": "Forgot password?",
       "signInButton": "Sign in",
       "signingIn": "Signing in...",
-      "orContinueWith": "or",
-      "continueWithGoogle": "Continue with Google",
-      "continueWithFacebook": "Continue with Facebook",
+      "orContinueWith": "Or continue with",
+      "continueWithGoogle": "Google",
+      "continueWithFacebook": "Facebook",
       "noAccount": "Don't have an account?",
       "signUp": "Sign up",
       "testCredentials": "Test Credentials:",
       "testEmail": "Email: test@example.com",
-      "testPassword": "Password: password123"
+      "testPassword": "Password: password123",
+      "emailRequired": "Email is required",
+      "invalidEmail": "Please enter a valid email address",
+      "passwordRequired": "Password is required",
+      "passwordLength": "Password must be at least 8 characters",
+      "loginError": "Invalid email or password",
+      "loginSuccess": "Login successful!",
+      "loginFailed": "Login failed. Please try again."
     },
     "register": {
       "title": "Create your account",
@@ -132,7 +140,17 @@
       "createAccountButton": "Create account",
       "creatingAccount": "Creating account...",
       "haveAccount": "Already have an account?",
-      "signIn": "Sign in"
+      "signIn": "Sign in",
+      "nameRequired": "Name is required",
+      "nameLength": "Name must be at least 2 characters",
+      "emailRequired": "Email is required",
+      "invalidEmail": "Please enter a valid email address",
+      "passwordRequired": "Password is required",
+      "passwordLength": "Password must be at least 8 characters",
+      "confirmPasswordRequired": "Please confirm your password",
+      "passwordMismatch": "Passwords do not match",
+      "registerSuccess": "Account created successfully!",
+      "registerFailed": "Registration failed. Please try again."
     },
     "forgotPassword": {
       "title": "Forgot password?",
@@ -178,32 +196,108 @@
       "goToLogin": "Go to login"
     }
   },
+  "onboarding": {
+    "steps": {
+      "welcome": "Welcome",
+      "welcomeDesc": "Get started",
+      "connectFacebook": "Connect Facebook",
+      "connectFacebookDesc": "Link your pages",
+      "connectInstagram": "Connect Instagram",
+      "connectInstagramDesc": "Add your accounts",
+      "allSet": "All Set!",
+      "allSetDesc": "Start managing"
+    },
+    "welcome": {
+      "title": "Welcome to AI Comments!",
+      "description": "Let's get you set up in just a few steps. We'll help you connect your Facebook and Instagram pages so our AI can start managing your comments automatically.",
+      "getStarted": "Get Started",
+      "skipForNow": "Skip for now",
+      "benefits": {
+        "fast": "Lightning Fast",
+        "fastDesc": "Respond in seconds",
+        "smart": "Smart AI",
+        "smartDesc": "Learns your style",
+        "save": "Save Time",
+        "saveDesc": "40+ hours/month"
+      }
+    },
+    "facebook": {
+      "title": "Connect Your Facebook Pages",
+      "description": "Select the Facebook pages you want to manage. We'll automatically moderate comments and engage with your audience.",
+      "connectButton": "Connect Facebook Account",
+      "security": "We'll only access your pages and comments. Your data is secure.",
+      "selectPages": "Select pages to manage",
+      "selected": "selected"
+    },
+    "instagram": {
+      "title": "Connect Your Instagram Accounts",
+      "description": "Add your Instagram business accounts to manage comments and DMs with AI assistance.",
+      "connectButton": "Connect Instagram Account",
+      "businessOnly": "Only business accounts can be connected via Facebook"
+    },
+    "success": {
+      "title": "You're All Set!",
+      "description": "Great! Your accounts are connected and our AI is ready to start managing your comments.",
+      "connectedAccounts": "Connected Accounts",
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "pages": "pages",
+      "accounts": "accounts",
+      "whatNext": "What happens next?",
+      "step1": "AI Training",
+      "step1Desc": "Our AI will learn your brand voice and style from existing comments",
+      "step2": "Auto-moderation",
+      "step2Desc": "Comments will be automatically approved, flagged, or rejected",
+      "step3": "Monitor & Adjust",
+      "step3Desc": "Review performance and fine-tune AI rules in your dashboard",
+      "goToDashboard": "Go to Dashboard"
+    },
+    "navigation": {
+      "back": "Back",
+      "skip": "Skip",
+      "continue": "Continue"
+    },
+    "needHelp": "Need help?",
+    "contactSupport": "Contact Support"
+  },
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome back",
     "subtitle": "Here's what's happening with your pages today.",
     "menu": {
-      "dashboard": "Dashboard",
+      "overview": "Overview",
       "pages": "Pages",
       "comments": "Comments",
       "analytics": "Analytics",
       "settings": "Settings"
     },
-    "stats": {
-      "commentsModerated": "Comments Moderated",
-      "approvalRate": "Approval Rate",
-      "timeSaved": "Time Saved",
-      "avgResponse": "Avg Response"
+    "emptyState": {
+      "title": "Let's Get Started!",
+      "description": "Connect your Facebook and Instagram pages to start automating your comment management with AI.",
+      "connectFacebook": "Connect Facebook",
+      "connectInstagram": "Connect Instagram",
+      "or": "or",
+      "guidedSetup": "Start Guided Setup",
+      "benefits": {
+        "fast": "Lightning Fast",
+        "fastDesc": "AI responds to comments in seconds",
+        "smart": "Smart & Safe",
+        "smartDesc": "Learns your brand voice and style",
+        "save": "Save Time",
+        "saveDesc": "Save 40+ hours every month"
+      }
     },
-    "recentActivity": "Recent Activity",
-    "activityItem": "Comment moderated automatically",
-    "timeAgo": "minutes ago",
     "profile": {
+      "viewProfile": "View profile",
       "profile": "Profile",
       "settings": "Settings",
       "logout": "Logout"
     },
-    "authStatus": "NextAuth Active",
-    "authMessage": "Real authentication enabled"
+    "preferences": {
+      "language": "Language",
+      "theme": "Theme",
+      "lightMode": "Light Mode",
+      "darkMode": "Dark Mode"
+    }
   }
 }

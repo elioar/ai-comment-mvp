@@ -13,6 +13,12 @@ export default function Home() {
   const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState<string>('en');
+  const [mounted, setMounted] = useState(false);
+
+  // Mount component to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Sync language state with i18n after mount to avoid hydration mismatch
   useEffect(() => {
@@ -42,6 +48,11 @@ export default function Home() {
     i18n.changeLanguage(lang);
     setCurrentLanguage(lang);
   };
+
+  // Prevent hydration mismatch - don't render until mounted
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 dark:from-black dark:via-gray-950 dark:to-black transition-colors">
@@ -158,27 +169,28 @@ export default function Home() {
 
         {/* Mobile Side Drawer - Outside header for proper z-index */}
         <>
-          {/* Backdrop */}
-          {mobileMenuOpen && (
-            <div
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998] lg:hidden"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-          )}
-          
-          {/* Side Drawer */}
+          {/* Backdrop with animation */}
           <div
-            className={`fixed top-0 left-0 h-full w-80 max-w-[85vw] bg-white dark:bg-gray-900 shadow-2xl z-[9999] lg:hidden transform transition-transform duration-300 ease-in-out ${
-              mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+            className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998] lg:hidden transition-opacity duration-300 ${
+              mobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
-            style={{ willChange: 'transform' }}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          
+          {/* Side Drawer with improved design */}
+          <div
+            className={`fixed top-0 right-0 h-full w-[320px] max-w-[85vw] bg-white dark:bg-gray-950 shadow-2xl z-[9999] lg:hidden transform transition-all duration-300 ease-out border-l border-gray-200 dark:border-gray-800 ${
+              mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}
           >
-              <div className="flex flex-col h-full">
-                {/* Drawer Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-violet-600 dark:from-blue-500 dark:to-violet-500 rounded-lg flex items-center justify-center shadow-lg">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex flex-col h-full">
+              {/* Drawer Header with gradient */}
+              <div className="relative px-6 pt-6 pb-5 border-b border-gray-200 dark:border-gray-800">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-600/5 to-violet-600/5 dark:from-blue-500/5 dark:to-violet-500/5"></div>
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-violet-600 dark:from-blue-500 dark:to-violet-500 rounded-xl flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                       </svg>
                     </div>
@@ -188,7 +200,7 @@ export default function Home() {
                   </div>
                   <button
                     onClick={() => setMobileMenuOpen(false)}
-                    className="p-2 rounded-lg text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                    className="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-900 transition-all"
                     aria-label="Close menu"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -196,58 +208,81 @@ export default function Home() {
                     </svg>
                   </button>
                 </div>
+              </div>
 
-                {/* Drawer Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {/* Navigation Links */}
-                  <nav className="space-y-2">
-                    <a
-                      href="#how-it-works"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all font-medium group"
-                    >
-                      <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {/* Drawer Content */}
+              <div className="flex-1 overflow-y-auto">
+                {/* User Profile Section (if logged in) */}
+                {session && (
+                  <div className="p-4 mx-4 mt-4 bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 rounded-2xl border border-blue-200/50 dark:border-blue-800/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-violet-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                        {session.user?.name?.charAt(0).toUpperCase() || 'U'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 dark:text-white truncate">{session.user?.name}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{session.user?.email}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Navigation Links */}
+                <nav className="px-4 mt-6 space-y-1">
+                  <p className="px-3 mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    {t('header.navigation')}
+                  </p>
+                  <a
+                    href="#how-it-works"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-xl transition-all font-medium group"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/50 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      {t('header.howItWorks')}
-                    </a>
-                    <a
-                      href="#benefits"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all font-medium group"
-                    >
-                      <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    </div>
+                    <span>{t('header.howItWorks')}</span>
+                  </a>
+                  <a
+                    href="#benefits"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-xl transition-all font-medium group"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 group-hover:bg-violet-100 dark:group-hover:bg-violet-900/50 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      {t('header.benefits')}
-                    </a>
-                  </nav>
+                    </div>
+                    <span>{t('header.benefits')}</span>
+                  </a>
+                </nav>
 
-                  {/* Divider */}
-                  <div className="border-t border-gray-200 dark:border-gray-800"></div>
+                {/* Settings Section */}
+                <div className="px-4 mt-6 space-y-4">
+                  <p className="px-3 mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    {t('dashboard.preferences.title')}
+                  </p>
 
                   {/* Language Toggle */}
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-4">
-                      Language
-                    </p>
-                    <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                  <div className="px-3">
+                    <div className="flex items-center gap-2 p-1.5 bg-gray-100 dark:bg-gray-900 rounded-xl">
                       <button
                         onClick={() => changeLanguage('en')}
-                        className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                           currentLanguage === 'en' || currentLanguage.startsWith('en')
-                            ? 'bg-blue-600 text-white shadow-md'
-                            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-md'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                         }`}
                       >
                         English
                       </button>
                       <button
                         onClick={() => changeLanguage('el')}
-                        className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                           currentLanguage === 'el' || currentLanguage.startsWith('el')
-                            ? 'bg-blue-600 text-white shadow-md'
-                            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-md'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                         }`}
                       >
                         Ελληνικά
@@ -256,70 +291,73 @@ export default function Home() {
                   </div>
 
                   {/* Theme Toggle */}
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-4">
-                      Theme
-                    </p>
+                  <div className="px-3">
                     <button
                       onClick={toggleTheme}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-all group"
+                      className="w-full flex items-center justify-between px-3 py-3 bg-gray-100 dark:bg-gray-900 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-800 transition-all group"
                     >
                       <div className="flex items-center gap-3">
-                        {theme === 'light' ? (
-                          <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                          </svg>
-                        )}
-                        <span className="text-gray-700 dark:text-gray-200 font-medium">
-                          {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+                        <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+                          {theme === 'light' ? (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-gray-700 dark:text-gray-200 font-medium text-sm">
+                          {theme === 'light' ? t('dashboard.preferences.darkMode') : t('dashboard.preferences.lightMode')}
                         </span>
                       </div>
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
                   </div>
-
-                  {/* Divider */}
-                  <div className="border-t border-gray-200 dark:border-gray-800"></div>
-
-                  {/* Auth Section */}
-                  {session ? (
-                    <div className="space-y-3">
-                      <Link
-                        href="/dashboard"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="block w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-center rounded-xl transition-all font-medium shadow-lg hover:shadow-xl"
-                      >
-                        Dashboard
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <Link
-                        href="/register"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="block w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-center rounded-xl transition-all font-medium shadow-lg hover:shadow-xl"
-                      >
-                        {t('hero.getStarted')}
-                      </Link>
-                      <Link
-                        href="/login"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="block w-full px-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-center rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-blue-600 dark:hover:border-blue-500 transition-all font-medium"
-                      >
-                        {t('header.signIn')}
-                      </Link>
-                    </div>
-                  )}
                 </div>
               </div>
+
+              {/* Footer CTA */}
+              <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+                {session ? (
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3.5 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-center rounded-xl transition-all font-semibold shadow-lg hover:shadow-xl"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    {t('dashboard.menu.overview')}
+                  </Link>
+                ) : (
+                  <div className="space-y-2">
+                    <Link
+                      href="/register"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-2 w-full px-4 py-3.5 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-center rounded-xl transition-all font-semibold shadow-lg hover:shadow-xl"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {t('hero.getStarted')}
+                    </Link>
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block w-full px-4 py-3 text-gray-700 dark:text-gray-200 text-center rounded-xl border-2 border-gray-200 dark:border-gray-800 hover:border-blue-600 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all font-medium"
+                    >
+                      {t('header.signIn')}
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
-          </>
+          </div>
+        </>
 
       <main>
         {/* Hero Section */}

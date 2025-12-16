@@ -1,6 +1,7 @@
 {
   "header": {
     "logo": "Τα Σχόλιά Μου",
+    "navigation": "Πλοήγηση",
     "howItWorks": "Πώς Λειτουργεί",
     "benefits": "Πλεονεκτήματα",
     "signIn": "Σύνδεση"
@@ -104,14 +105,21 @@
       "forgotPassword": "Ξεχάσατε τον κωδικό;",
       "signInButton": "Σύνδεση",
       "signingIn": "Σύνδεση...",
-      "orContinueWith": "ή",
-      "continueWithGoogle": "Συνέχεια με Google",
-      "continueWithFacebook": "Συνέχεια με Facebook",
+      "orContinueWith": "Ή συνεχίστε με",
+      "continueWithGoogle": "Google",
+      "continueWithFacebook": "Facebook",
       "noAccount": "Δεν έχετε λογαριασμό;",
       "signUp": "Εγγραφή",
       "testCredentials": "Στοιχεία Δοκιμής:",
       "testEmail": "Email: test@example.com",
-      "testPassword": "Κωδικός: password123"
+      "testPassword": "Κωδικός: password123",
+      "emailRequired": "Το email είναι υποχρεωτικό",
+      "invalidEmail": "Παρακαλώ εισάγετε έγκυρη διεύθυνση email",
+      "passwordRequired": "Ο κωδικός είναι υποχρεωτικός",
+      "passwordLength": "Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες",
+      "loginError": "Λάθος email ή κωδικός",
+      "loginSuccess": "Επιτυχής σύνδεση!",
+      "loginFailed": "Η σύνδεση απέτυχε. Παρακαλώ δοκιμάστε ξανά."
     },
     "register": {
       "title": "Δημιουργήστε τον λογαριασμό σας",
@@ -132,7 +140,17 @@
       "createAccountButton": "Δημιουργία λογαριασμού",
       "creatingAccount": "Δημιουργία λογαριασμού...",
       "haveAccount": "Έχετε ήδη λογαριασμό;",
-      "signIn": "Σύνδεση"
+      "signIn": "Σύνδεση",
+      "nameRequired": "Το όνομα είναι υποχρεωτικό",
+      "nameLength": "Το όνομα πρέπει να έχει τουλάχιστον 2 χαρακτήρες",
+      "emailRequired": "Το email είναι υποχρεωτικό",
+      "invalidEmail": "Παρακαλώ εισάγετε έγκυρη διεύθυνση email",
+      "passwordRequired": "Ο κωδικός είναι υποχρεωτικός",
+      "passwordLength": "Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες",
+      "confirmPasswordRequired": "Παρακαλώ επιβεβαιώστε τον κωδικό σας",
+      "passwordMismatch": "Οι κωδικοί δεν ταιριάζουν",
+      "registerSuccess": "Ο λογαριασμός δημιουργήθηκε με επιτυχία!",
+      "registerFailed": "Η εγγραφή απέτυχε. Παρακαλώ δοκιμάστε ξανά."
     },
     "forgotPassword": {
       "title": "Ξεχάσατε τον κωδικό;",
@@ -178,32 +196,108 @@
       "goToLogin": "Μετάβαση στη σύνδεση"
     }
   },
+  "onboarding": {
+    "steps": {
+      "welcome": "Καλωσόρισμα",
+      "welcomeDesc": "Ξεκινήστε",
+      "connectFacebook": "Σύνδεση Facebook",
+      "connectFacebookDesc": "Συνδέστε σελίδες",
+      "connectInstagram": "Σύνδεση Instagram",
+      "connectInstagramDesc": "Προσθέστε λογαριασμούς",
+      "allSet": "Όλα Έτοιμα!",
+      "allSetDesc": "Ξεκινήστε διαχείριση"
+    },
+    "welcome": {
+      "title": "Καλώς ήρθατε στο AI Comments!",
+      "description": "Ας σας ρυθμίσουμε σε λίγα απλά βήματα. Θα σας βοηθήσουμε να συνδέσετε τις σελίδες σας στο Facebook και Instagram ώστε η τεχνητή νοημοσύνη μας να ξεκινήσει την αυτόματη διαχείριση των σχολίων σας.",
+      "getStarted": "Ξεκινήστε",
+      "skipForNow": "Θα το κάνω αργότερα",
+      "benefits": {
+        "fast": "Αστραπιαία Ταχύτητα",
+        "fastDesc": "Απάντηση σε δευτερόλεπτα",
+        "smart": "Έξυπνη AI",
+        "smartDesc": "Μαθαίνει το στυλ σας",
+        "save": "Εξοικονομήστε Χρόνο",
+        "saveDesc": "40+ ώρες/μήνα"
+      }
+    },
+    "facebook": {
+      "title": "Συνδέστε τις Σελίδες σας στο Facebook",
+      "description": "Επιλέξτε τις σελίδες Facebook που θέλετε να διαχειριστείτε. Θα ελέγχουμε αυτόματα τα σχόλια και θα αλληλεπιδράμε με το κοινό σας.",
+      "connectButton": "Σύνδεση Λογαριασμού Facebook",
+      "security": "Θα έχουμε πρόσβαση μόνο στις σελίδες και τα σχόλια σας. Τα δεδομένα σας είναι ασφαλή.",
+      "selectPages": "Επιλέξτε σελίδες για διαχείριση",
+      "selected": "επιλεγμένες"
+    },
+    "instagram": {
+      "title": "Συνδέστε τους Λογαριασμούς σας στο Instagram",
+      "description": "Προσθέστε τους επαγγελματικούς λογαριασμούς σας στο Instagram για να διαχειριστείτε σχόλια και μηνύματα με βοήθεια AI.",
+      "connectButton": "Σύνδεση Λογαριασμού Instagram",
+      "businessOnly": "Μόνο επαγγελματικοί λογαριασμοί μπορούν να συνδεθούν μέσω Facebook"
+    },
+    "success": {
+      "title": "Όλα Έτοιμα!",
+      "description": "Υπέροχα! Οι λογαριασμοί σας είναι συνδεδεμένοι και η τεχνητή νοημοσύνη μας είναι έτοιμη να ξεκινήσει τη διαχείριση των σχολίων σας.",
+      "connectedAccounts": "Συνδεδεμένοι Λογαριασμοί",
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "pages": "σελίδες",
+      "accounts": "λογαριασμοί",
+      "whatNext": "Τι συμβαίνει στη συνέχεια;",
+      "step1": "Εκπαίδευση AI",
+      "step1Desc": "Η τεχνητή νοημοσύνη μας θα μάθει τη φωνή και το στυλ της επωνυμίας σας από υπάρχοντα σχόλια",
+      "step2": "Αυτόματος Έλεγχος",
+      "step2Desc": "Τα σχόλια θα εγκρίνονται, σημαιοδοτούνται ή απορρίπτονται αυτόματα",
+      "step3": "Παρακολούθηση & Προσαρμογή",
+      "step3Desc": "Ελέγξτε την απόδοση και προσαρμόστε τους κανόνες AI στον πίνακα ελέγχου σας",
+      "goToDashboard": "Μετάβαση στον Πίνακα Ελέγχου"
+    },
+    "navigation": {
+      "back": "Πίσω",
+      "skip": "Παράλειψη",
+      "continue": "Συνέχεια"
+    },
+    "needHelp": "Χρειάζεστε βοήθεια;",
+    "contactSupport": "Επικοινωνήστε με την Υποστήριξη"
+  },
   "dashboard": {
     "title": "Πίνακας Ελέγχου",
     "welcome": "Καλώς ήρθατε πίσω",
     "subtitle": "Δείτε τι συμβαίνει με τις σελίδες σας σήμερα.",
     "menu": {
-      "dashboard": "Πίνακας Ελέγχου",
+      "overview": "Επισκόπηση",
       "pages": "Σελίδες",
       "comments": "Σχόλια",
       "analytics": "Αναλυτικά",
       "settings": "Ρυθμίσεις"
     },
-    "stats": {
-      "commentsModerated": "Σχόλια που Διαχειρίστηκαν",
-      "approvalRate": "Ποσοστό Έγκρισης",
-      "timeSaved": "Χρόνος που Εξοικονομήθηκε",
-      "avgResponse": "Μέση Απάντηση"
+    "emptyState": {
+      "title": "Ας Ξεκινήσουμε!",
+      "description": "Συνδέστε τις σελίδες σας στο Facebook και Instagram για να ξεκινήσετε την αυτόματη διαχείριση σχολίων με τεχνητή νοημοσύνη.",
+      "connectFacebook": "Σύνδεση Facebook",
+      "connectInstagram": "Σύνδεση Instagram",
+      "or": "ή",
+      "guidedSetup": "Ξεκινήστε την Καθοδηγούμενη Ρύθμιση",
+      "benefits": {
+        "fast": "Αστραπιαία Ταχύτητα",
+        "fastDesc": "Η τεχνητή νοημοσύνη απαντά σε σχόλια σε δευτερόλεπτα",
+        "smart": "Έξυπνο & Ασφαλές",
+        "smartDesc": "Μαθαίνει τη φωνή και το στυλ της επωνυμίας σας",
+        "save": "Εξοικονομήστε Χρόνο",
+        "saveDesc": "Εξοικονομήστε 40+ ώρες κάθε μήνα"
+      }
     },
-    "recentActivity": "Πρόσφατη Δραστηριότητα",
-    "activityItem": "Το σχόλιο διαχειρίστηκε αυτόματα",
-    "timeAgo": "λεπτά πριν",
     "profile": {
+      "viewProfile": "Προβολή προφίλ",
       "profile": "Προφίλ",
       "settings": "Ρυθμίσεις",
       "logout": "Αποσύνδεση"
     },
-    "authStatus": "NextAuth Ενεργό",
-    "authMessage": "Πραγματική πιστοποίηση ενεργοποιημένη"
+    "preferences": {
+      "language": "Γλώσσα",
+      "theme": "Θέμα",
+      "lightMode": "Φωτεινή Λειτουργία",
+      "darkMode": "Σκοτεινή Λειτουργία"
+    }
   }
 }

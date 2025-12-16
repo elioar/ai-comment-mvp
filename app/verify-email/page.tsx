@@ -3,11 +3,13 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Alert } from '@/components/ui/Alert';
 import { authFunctions } from '@/lib/authFunctions';
 
 function VerifyEmailContent() {
+  const { t } = useTranslation();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
@@ -20,7 +22,7 @@ function VerifyEmailContent() {
       if (!token) {
         setAlertMessage({
           type: 'error',
-          message: 'Invalid or missing verification token.',
+          message: t('auth.verifyEmail.failureMessage'),
         });
         setIsVerifying(false);
         return;
@@ -30,13 +32,13 @@ function VerifyEmailContent() {
         const response = await authFunctions.verifyEmail(token);
         setAlertMessage({
           type: 'success',
-          message: response.message || 'Email verified successfully!',
+          message: response.message || t('auth.verifyEmail.successMessage'),
         });
         setIsSuccess(true);
       } catch (error) {
         setAlertMessage({
           type: 'error',
-          message: error instanceof Error ? error.message : 'Failed to verify email. Please try again.',
+          message: error instanceof Error ? error.message : t('auth.verifyEmail.failureMessage'),
         });
       } finally {
         setIsVerifying(false);
@@ -59,8 +61,8 @@ function VerifyEmailContent() {
                 </svg>
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Verifying your email</h1>
-                <p className="text-gray-600 dark:text-gray-300">Please wait while we verify your email address...</p>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{t('auth.verifyEmail.verifying')}</h1>
+                <p className="text-gray-600 dark:text-gray-300">{t('auth.verifyEmail.pleaseWait')}</p>
               </div>
             </div>
           ) : (
@@ -81,7 +83,7 @@ function VerifyEmailContent() {
 
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-                  {isSuccess ? 'Email verified!' : 'Verification failed'}
+                  {isSuccess ? t('auth.verifyEmail.verified') : t('auth.verifyEmail.verificationFailed')}
                 </h1>
                 
                 {alertMessage && (
@@ -96,33 +98,33 @@ function VerifyEmailContent() {
                 {isSuccess ? (
                   <div className="space-y-4">
                     <p className="text-gray-600 dark:text-gray-300">
-                      Your email has been successfully verified. You can now log in to your account.
+                      {t('auth.verifyEmail.successMessage')}
                     </p>
                     <Link
                       href="/login"
                       className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all shadow-lg hover:shadow-xl"
                     >
-                      Continue to login
+                      {t('auth.verifyEmail.continueToLogin')}
                     </Link>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <p className="text-gray-600 dark:text-gray-300">
-                      The verification link may have expired or is invalid.
+                      {t('auth.verifyEmail.failureMessage')}
                     </p>
                     <div className="space-y-3">
                       <Link
                         href="/register"
                         className="block text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
                       >
-                        Create a new account
+                        {t('auth.verifyEmail.createNewAccount')}
                       </Link>
-                      <div className="text-gray-500 dark:text-gray-400">or</div>
+                      <div className="text-gray-500 dark:text-gray-400">{t('auth.verifyEmail.or')}</div>
                       <Link
                         href="/login"
                         className="block text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
                       >
-                        Go to login
+                        {t('auth.verifyEmail.goToLogin')}
                       </Link>
                     </div>
                   </div>
@@ -148,7 +150,7 @@ export default function VerifyEmailPage() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             </div>
-            <p className="text-gray-600 dark:text-gray-300">Loading...</p>
+            <p className="text-gray-600 dark:text-gray-300">{t('auth.verifyEmail.pleaseWait')}</p>
           </div>
         </div>
       </AuthLayout>
