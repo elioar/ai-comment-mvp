@@ -143,15 +143,11 @@ export const authOptions = {
             }
           } else {
             // Fallback: check for recent sessions with non-Facebook accounts
-            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-            
+            // Note: Session model doesn't have createdAt, so we'll just check for valid sessions
             const recentSessions = await prisma.session.findMany({
               where: {
                 expires: {
                   gte: new Date(), // Still valid
-                },
-                createdAt: {
-                  gte: tenMinutesAgo, // Created recently
                 },
               },
               include: {
@@ -251,7 +247,7 @@ export const authOptions = {
           const recentSessions = await prisma.session.findMany({
             where: {
               expires: {
-                gte: new Date(Date.now() - 10 * 60 * 1000), // Last 10 minutes
+                gte: new Date(), // Still valid
               },
             },
             include: {
