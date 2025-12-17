@@ -30,16 +30,20 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                const theme = localStorage.getItem('theme');
-                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                const shouldBeDark = theme === 'dark' || (!theme && prefersDark);
-                
-                if (shouldBeDark) {
-                  document.documentElement.classList.add('dark');
-                } else {
-                  document.documentElement.classList.remove('dark');
+                if (typeof document !== 'undefined' && document.documentElement) {
+                  const theme = localStorage.getItem('theme');
+                  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  const shouldBeDark = theme === 'dark' || (!theme && prefersDark);
+                  
+                  if (shouldBeDark) {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
                 }
-              } catch (e) {}
+              } catch (e) {
+                // Silently fail if localStorage or matchMedia not available
+              }
             `,
           }}
         />

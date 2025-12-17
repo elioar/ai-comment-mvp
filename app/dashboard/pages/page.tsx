@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSession, signOut, signIn } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -48,6 +48,7 @@ export default function PagesPage() {
   const [connecting, setConnecting] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasHandledOAuth = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -72,52 +73,64 @@ export default function PagesPage() {
 
   useEffect(() => {
     if (session) {
-      fetchData();
-      // After OAuth redirect, try to link Facebook account to current user
-      linkFacebookAccount();
+      const handleOAuthCallback = async () => {
+        // Check if we just came back from Facebook OAuth (indicated by #_=_ hash)
+        const hasOAuthHash = window.location.hash === '#_=_';
+        
+        if (hasOAuthHash && !hasHandledOAuth.current) {
+          hasHandledOAuth.current = true;
+          
+          // Clean up Facebook redirect hash
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          
+          console.log('Detected Facebook OAuth callback, refreshing session...');
+          
+          // Wait for NextAuth to process the OAuth callback
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Refresh the router to trigger session refresh
+          router.refresh();
+          
+          // Wait a bit more for session to update
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          console.log('Session refreshed, fetching pages...');
+        }
+        
+        // Always fetch data when session is available
+        fetchData();
+        
+        // Clean up any stored linking user ID
+        linkFacebookAccount();
+      };
+      
+      handleOAuthCallback();
     }
   }, [session]);
 
   const linkFacebookAccount = async () => {
     try {
-      // Check if we just came back from Facebook OAuth
       const urlParams = new URLSearchParams(window.location.search);
       const storedUserId = sessionStorage.getItem('linkingUserId');
+      const currentUserId = session?.user?.id;
       
-      if (urlParams.get('linked') !== 'true' && storedUserId) {
-        // Try to link any unlinked Facebook account to the stored user ID
-        const response = await fetch('/api/facebook/link-account', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            targetUserId: storedUserId, // Pass the original user ID
-          }),
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && !data.alreadyLinked) {
-            // Clear the stored user ID
-            sessionStorage.removeItem('linkingUserId');
-            // Refresh the page data after linking
-            await fetchData();
-            // Update URL to prevent re-linking
-            window.history.replaceState({}, '', '/dashboard/pages?linked=true');
-            // Refresh data to show updated pages
-            await fetchData();
-          }
-        } else {
-          // Clear stored ID on error
-          sessionStorage.removeItem('linkingUserId');
+      // If we have a stored user ID and it matches current user, or if we just came from OAuth
+      // The account should already be linked by the signIn callback, but we refresh data anyway
+      if (storedUserId && storedUserId === currentUserId) {
+        // Clear the stored user ID
+        sessionStorage.removeItem('linkingUserId');
+        // Refresh the page data
+        await fetchData();
+        // Clean up URL
+        if (window.location.hash || window.location.search) {
+          window.history.replaceState({}, '', '/dashboard/pages');
         }
       } else if (storedUserId) {
-        // Already linked, clear the stored ID
+        // Stored ID doesn't match, clear it
         sessionStorage.removeItem('linkingUserId');
       }
     } catch (error) {
-      console.error('Error linking Facebook account:', error);
+      console.error('Error in linkFacebookAccount:', error);
       sessionStorage.removeItem('linkingUserId');
     }
   };
@@ -518,16 +531,20 @@ export default function PagesPage() {
                   </div>
                   <button
                     onClick={async () => {
-                      // Store current user ID before OAuth
+                      // Store current user ID before OAuth (both in cookie and sessionStorage)
                       if (session?.user?.id) {
                         try {
+                          // Store in cookie (for server-side)
                           await fetch('/api/auth/set-linking-user', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ userId: session.user.id }),
                           });
+                          // Also store in sessionStorage (for client-side)
+                          sessionStorage.setItem('linkingUserId', session.user.id);
                         } catch (error) {
                           console.error('Error storing linking user:', error);
+                          // Still continue with OAuth even if storing fails
                         }
                       }
                       await signIn('facebook', { callbackUrl: '/dashboard/pages' });

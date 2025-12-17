@@ -54,6 +54,24 @@ export async function GET(request: NextRequest) {
     if (!pagesResponse.ok) {
       const errorText = await pagesResponse.text();
       console.error('Facebook API error:', errorText);
+      
+      // Check if it's a token error
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.error?.code === 190 || errorData.error?.type === 'OAuthException') {
+          // Access token expired or invalid
+          console.error('Facebook access token expired or invalid');
+          return NextResponse.json({
+            connectedPages,
+            pages: [],
+            instagramPages: [],
+            error: 'Facebook access token expired. Please reconnect your Facebook account.',
+          });
+        }
+      } catch (e) {
+        // Not JSON, continue with generic error
+      }
+      
       return NextResponse.json({
         connectedPages,
         pages: [],
