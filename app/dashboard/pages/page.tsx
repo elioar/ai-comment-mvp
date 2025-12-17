@@ -127,19 +127,39 @@ export default function PagesPage() {
     setError(null);
     try {
       const response = await fetch('/api/facebook/pages');
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        setError('Failed to fetch pages');
+        return;
+      }
+      
+      // Always set connected pages first, even if there's an error (they're stored in DB)
+      if (data.connectedPages && Array.isArray(data.connectedPages)) {
+        setConnectedPages(data.connectedPages);
+      }
+      
       if (response.ok) {
-        const data = await response.json();
         setPages(data.pages || []);
         setInstagramPages(data.instagramPages || []);
-        setConnectedPages(data.connectedPages || []);
-        if (data.error) {
+        // Only show error if there are no connected pages to display
+        if (data.error && (!data.connectedPages || data.connectedPages.length === 0)) {
           setError(data.error);
         }
       } else {
-        setError('Failed to fetch pages');
+        // Even if response is not ok, we still have connected pages
+        setPages(data.pages || []);
+        setInstagramPages(data.instagramPages || []);
+        // Only show error if we have no connected pages to display
+        if (!data.connectedPages || data.connectedPages.length === 0) {
+          setError(data.error || 'Failed to fetch pages');
+        }
       }
     } catch (error) {
       console.error('Error fetching pages:', error);
+      // Don't set error if we have connected pages - they might still work
       setError('Error loading pages');
     } finally {
       setLoading(false);
