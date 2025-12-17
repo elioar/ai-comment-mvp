@@ -102,25 +102,31 @@ export const authOptions = {
           
           // Exchange short-lived token for long-lived token (60 days) immediately
           let longLivedToken = account.access_token;
+          console.log('[signIn callback] Starting Facebook token exchange for user:', linkingUserId);
+          console.log('[signIn callback] Original token length:', account.access_token?.length || 0);
+          
           try {
             const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${account.access_token}`;
+            console.log('[signIn callback] Exchanging token at:', tokenExchangeUrl.replace(account.access_token || '', '[TOKEN]'));
+            
             const tokenResponse = await fetch(tokenExchangeUrl);
             
             if (tokenResponse.ok) {
               const tokenData = await tokenResponse.json();
               longLivedToken = tokenData.access_token;
-              console.log('Successfully exchanged Facebook token for long-lived token');
+              console.log('[signIn callback] ✅ Successfully exchanged Facebook token for long-lived token');
+              console.log('[signIn callback] Long-lived token length:', longLivedToken?.length || 0);
               
-              // Update the account object with the long-lived token
-              // This ensures NextAuth stores the long-lived token
-              account.access_token = longLivedToken;
+              // Note: We can't mutate account.access_token directly (it's read-only)
+              // We'll update it in the database after NextAuth saves the account
             } else {
               const errorText = await tokenResponse.text();
-              console.error('Failed to exchange Facebook token:', errorText);
+              console.error('[signIn callback] ❌ Failed to exchange Facebook token:', errorText);
+              console.error('[signIn callback] Response status:', tokenResponse.status);
               // Continue with short-lived token - we'll try to exchange it later
             }
           } catch (tokenError) {
-            console.error('Error exchanging Facebook token:', tokenError);
+            console.error('[signIn callback] ❌ Error exchanging Facebook token:', tokenError);
             // Continue with short-lived token
           }
           
@@ -129,7 +135,10 @@ export const authOptions = {
             const newUserId = user.id;
 
             // Link the Facebook account to the original user immediately with long-lived token
-            await prisma.account.updateMany({
+            console.log('[signIn callback] Linking Facebook account to user:', linkingUserId);
+            console.log('[signIn callback] Provider account ID:', account.providerAccountId);
+            
+            const updateResult = await prisma.account.updateMany({
               where: {
                 providerAccountId: account.providerAccountId,
                 provider: 'facebook',
@@ -139,6 +148,8 @@ export const authOptions = {
                 access_token: longLivedToken, // Store the long-lived token
               },
             });
+            
+            console.log('[signIn callback] Account update result:', updateResult.count, 'rows updated');
 
             // Get the original user to update the user object
             const originalUser = await prisma.user.findUnique({
@@ -166,7 +177,8 @@ export const authOptions = {
           } else if (linkingUserId && linkingUserId === user.id) {
             // Account already linked to this user (reconnection scenario)
             // Just update the token
-            await prisma.account.updateMany({
+            console.log('[signIn callback] Reconnection scenario - updating token for existing account');
+            const updateResult = await prisma.account.updateMany({
               where: {
                 providerAccountId: account.providerAccountId,
                 provider: 'facebook',
@@ -176,7 +188,9 @@ export const authOptions = {
                 access_token: longLivedToken, // Update with long-lived token
               },
             });
-            console.log('Updated Facebook token for existing account');
+            console.log('[signIn callback] Token update result:', updateResult.count, 'rows updated');
+          } else {
+            console.log('[signIn callback] No linking user ID found, account will be created normally');
           }
         } catch (error) {
           console.error('Error in signIn callback during account linking:', error);
@@ -228,6 +242,10 @@ export const authOptions = {
       // If this is Facebook OAuth, ensure the token in database is long-lived
       // This runs AFTER NextAuth's PrismaAdapter has saved the account
       if (message.account?.provider === 'facebook' && message.account?.access_token) {
+        console.log('[events.signIn] Facebook OAuth completed for user:', message.user.id);
+        console.log('[events.signIn] Is new user:', message.isNewUser);
+        console.log('[events.signIn] Account provider ID:', message.account.providerAccountId);
+        
         try {
           // Find the account that was just created/updated by NextAuth
           const savedAccount = await prisma.account.findFirst({
@@ -239,13 +257,14 @@ export const authOptions = {
           });
 
           if (savedAccount) {
-            // Check if the stored token is different from what we exchanged (meaning it might be short-lived)
-            // Or if it's the same, verify it's actually long-lived by checking if we need to exchange it
-            // The signIn callback should have already exchanged it, but this is a safety check
+            console.log('[events.signIn] Found saved account in database');
+            console.log('[events.signIn] Saved token length:', savedAccount.access_token?.length || 0);
+            console.log('[events.signIn] Original token length:', message.account.access_token?.length || 0);
             
-            // Only exchange if the token in DB is the same as the original (short-lived) token
+            // Check if the stored token is the same as the original (short-lived) token
             // This means the exchange in signIn callback might have failed
             if (savedAccount.access_token === message.account.access_token) {
+              console.log('[events.signIn] Token appears to be short-lived, attempting exchange...');
               // Token wasn't exchanged in signIn callback, try now
               try {
                 const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${message.account.access_token}`;
@@ -261,20 +280,22 @@ export const authOptions = {
                     data: { access_token: longLivedToken },
                   });
                   
-                  console.log('Updated Facebook token to long-lived in events callback (backup)');
+                  console.log('[events.signIn] ✅ Updated Facebook token to long-lived (backup)');
                 } else {
                   const errorText = await tokenResponse.text();
-                  console.error('Failed to exchange token in events callback:', errorText);
+                  console.error('[events.signIn] ❌ Failed to exchange token:', errorText);
                 }
               } catch (tokenError) {
-                console.error('Error exchanging token in events callback:', tokenError);
+                console.error('[events.signIn] ❌ Error exchanging token:', tokenError);
               }
             } else {
-              console.log('Token already exchanged in signIn callback, skipping events callback exchange');
+              console.log('[events.signIn] ✅ Token already exchanged in signIn callback, skipping');
             }
+          } else {
+            console.log('[events.signIn] ⚠️ Account not found in database yet');
           }
         } catch (error) {
-          console.error('Error in signIn event:', error);
+          console.error('[events.signIn] ❌ Error in signIn event:', error);
         }
       }
       
