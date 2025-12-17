@@ -77,7 +77,6 @@ export const authOptions = {
               FacebookProvider({
                 clientId: process.env.FACEBOOK_CLIENT_ID,
                 clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
-                allowDangerousEmailAccountLinking: true, // Allow linking accounts with same email
                 authorization: {
                   params: {
                     scope: 'pages_read_engagement pages_show_list pages_manage_posts instagram_basic instagram_manage_comments',
@@ -94,10 +93,10 @@ export const authOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }: { user: User; account?: Account | null; profile?: Profile }) {
-      // If this is Facebook OAuth, try to link to existing user immediately
+      // If this is Facebook OAuth, link it to the current logged-in user
       if (account?.provider === 'facebook') {
         try {
-          // Try to get the original user ID from cookie (set before OAuth)
+          // Get the original user ID from cookie (set before OAuth)
           const cookieStore = await cookies();
           const linkingUserId = cookieStore.get('linking_user_id')?.value;
           
@@ -133,61 +132,11 @@ export const authOptions = {
                 await prisma.user.delete({
                   where: { id: newUserId },
                 });
-                console.log('Deleted duplicate user created by OAuth');
+                console.log('Linked Facebook account to existing user:', originalUser.email);
               } catch (deleteError) {
                 // User might have dependencies, that's okay
                 console.log('Could not delete duplicate user, but account is linked');
               }
-              
-              console.log('Linked Facebook account to original user in signIn callback:', originalUser.email);
-            }
-          } else {
-            // Fallback: check for recent sessions with non-Facebook accounts
-            // Note: Session model doesn't have createdAt, so we'll just check for valid sessions
-            const recentSessions = await prisma.session.findMany({
-              where: {
-                expires: {
-                  gte: new Date(), // Still valid
-                },
-              },
-              include: {
-                user: {
-                  include: {
-                    accounts: true,
-                  },
-                },
-              },
-              orderBy: {
-                expires: 'desc',
-              },
-              take: 5,
-            });
-
-            // Find a user with non-Facebook accounts (the original logged-in user)
-            const originalUser = recentSessions.find(
-              (s) => 
-                s.user.id !== user.id && 
-                s.user.accounts.some((acc) => acc.provider !== 'facebook')
-            )?.user;
-
-            if (originalUser) {
-              // Link the Facebook account to the original user immediately
-              await prisma.account.updateMany({
-                where: {
-                  providerAccountId: account.providerAccountId,
-                  provider: 'facebook',
-                },
-                data: {
-                  userId: originalUser.id,
-                },
-              });
-
-              // Update the user object to point to original user
-              user.id = originalUser.id;
-              user.email = originalUser.email;
-              user.name = originalUser.name || user.name;
-              
-              console.log('Linked Facebook account to original user (fallback):', originalUser.email);
             }
           }
         } catch (error) {
@@ -237,66 +186,6 @@ export const authOptions = {
   },
   events: {
     async signIn(message: { user: User; account?: any; profile?: any; isNewUser?: boolean }) {
-      // If this is a Facebook OAuth and a new user was created, try to link to existing user
-      if (message.account?.provider === 'facebook' && message.isNewUser) {
-        try {
-          // Try to get the original user ID from cookie (set before OAuth)
-          // Note: In NextAuth events, we don't have direct access to cookies,
-          // so we'll handle this in the link-account API after redirect
-          // For now, we'll check for recent sessions with non-Facebook accounts
-          const recentSessions = await prisma.session.findMany({
-            where: {
-              expires: {
-                gte: new Date(), // Still valid
-              },
-            },
-            include: {
-              user: {
-                include: {
-                  accounts: true,
-                },
-              },
-            },
-            orderBy: {
-              expires: 'desc',
-            },
-            take: 5,
-          });
-
-          // Find a session user that has non-Facebook accounts (likely the original user)
-          const originalUser = recentSessions.find(
-            (s) => 
-              s.user.id !== message.user.id && 
-              s.user.accounts.some((acc) => acc.provider !== 'facebook')
-          )?.user;
-
-          if (originalUser) {
-            // Link the Facebook account to the original user
-            await prisma.account.updateMany({
-              where: {
-                providerAccountId: message.account.providerAccountId,
-                provider: 'facebook',
-              },
-              data: {
-                userId: originalUser.id,
-              },
-            });
-
-            // Delete the duplicate user created by OAuth
-            try {
-              await prisma.user.delete({
-                where: { id: message.user.id },
-              });
-              console.log(`Linked Facebook account to original user: ${originalUser.email}`);
-            } catch (error) {
-              console.log('Could not delete duplicate user, but account is linked');
-            }
-          }
-        } catch (error) {
-          console.error('Error in signIn event during account linking:', error);
-        }
-      }
-      
       // Log successful sign-ins in development
       if (process.env.NODE_ENV === 'development') {
         console.log('Sign in successful:', { 

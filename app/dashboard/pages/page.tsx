@@ -1,4 +1,4 @@
-'use client';
+cleare'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useSession, signOut, signIn } from 'next-auth/react';
@@ -99,41 +99,12 @@ export default function PagesPage() {
         
         // Always fetch data when session is available
         fetchData();
-        
-        // Clean up any stored linking user ID
-        linkFacebookAccount();
       };
       
       handleOAuthCallback();
     }
   }, [session]);
 
-  const linkFacebookAccount = async () => {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const storedUserId = sessionStorage.getItem('linkingUserId');
-      const currentUserId = session?.user?.id;
-      
-      // If we have a stored user ID and it matches current user, or if we just came from OAuth
-      // The account should already be linked by the signIn callback, but we refresh data anyway
-      if (storedUserId && storedUserId === currentUserId) {
-        // Clear the stored user ID
-        sessionStorage.removeItem('linkingUserId');
-        // Refresh the page data
-        await fetchData();
-        // Clean up URL
-        if (window.location.hash || window.location.search) {
-          window.history.replaceState({}, '', '/dashboard/pages');
-        }
-      } else if (storedUserId) {
-        // Stored ID doesn't match, clear it
-        sessionStorage.removeItem('linkingUserId');
-      }
-    } catch (error) {
-      console.error('Error in linkFacebookAccount:', error);
-      sessionStorage.removeItem('linkingUserId');
-    }
-  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -531,17 +502,14 @@ export default function PagesPage() {
                   </div>
                   <button
                     onClick={async () => {
-                      // Store current user ID before OAuth (both in cookie and sessionStorage)
+                      // Store current user ID before OAuth so we can link Facebook to this account
                       if (session?.user?.id) {
                         try {
-                          // Store in cookie (for server-side)
                           await fetch('/api/auth/set-linking-user', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ userId: session.user.id }),
                           });
-                          // Also store in sessionStorage (for client-side)
-                          sessionStorage.setItem('linkingUserId', session.user.id);
                         } catch (error) {
                           console.error('Error storing linking user:', error);
                           // Still continue with OAuth even if storing fails
