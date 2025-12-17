@@ -127,64 +127,15 @@ export async function GET(request: NextRequest) {
     console.log('[API] ✅ Token is valid for user:', meData.name || meData.id);
 
     // Fetch user's Facebook pages
-    // Try multiple endpoints to find pages
-    console.log('[API] Attempting to fetch pages using multiple methods...');
-    
-    // Method 1: Standard me/accounts endpoint
-    let pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,category`;
-    console.log('[API] Method 1 - Fetching from me/accounts...');
+    // Fetch user's Facebook pages
+    // Note: We need pages_show_list permission for this to work
+    const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,category&limit=100`;
+    console.log('[API] Fetching pages from Facebook API...');
     console.log('[API] URL:', pagesUrl.replace(accessToken, '[TOKEN]'));
     
     let pagesResponse = await fetch(pagesUrl);
     
-    // If empty, try Method 2: Check if user has pages via /me endpoint
-    if (pagesResponse.ok) {
-      const testData = await pagesResponse.text();
-      const testParsed = JSON.parse(testData);
-      if (!testParsed.data || testParsed.data.length === 0) {
-        console.log('[API] Method 1 returned empty, trying alternative methods...');
-        
-        // Method 2: Try with limit parameter
-        pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,category&limit=100`;
-        console.log('[API] Method 2 - Trying with limit=100...');
-        pagesResponse = await fetch(pagesUrl);
-        
-        if (pagesResponse.ok) {
-          const testData2 = await pagesResponse.text();
-          const testParsed2 = JSON.parse(testData2);
-          if (!testParsed2.data || testParsed2.data.length === 0) {
-            // Method 3: Try checking user's pages via /me?fields=accounts
-            console.log('[API] Method 3 - Trying /me?fields=accounts...');
-            const meAccountsUrl = `https://graph.facebook.com/v18.0/me?fields=accounts{id,name,access_token}&access_token=${accessToken}`;
-            const meAccountsResponse = await fetch(meAccountsUrl);
-            
-            if (meAccountsResponse.ok) {
-              const meAccountsData = await meAccountsResponse.json();
-              console.log('[API] Method 3 response:', JSON.stringify(meAccountsData, null, 2));
-              
-              if (meAccountsData.accounts && meAccountsData.accounts.data && meAccountsData.accounts.data.length > 0) {
-                // Found pages via alternative method
-                const pagesData = {
-                  data: meAccountsData.accounts.data.map((page: any) => ({
-                    id: page.id,
-                    name: page.name,
-                    access_token: page.access_token || accessToken, // Use user token if page token not available
-                  }))
-                };
-                console.log('[API] ✅ Found pages via Method 3:', pagesData.data.length);
-                // Continue with this data
-                const facebookPages = pagesData.data || [];
-                // Skip to processing pages
-                return processPages(facebookPages, connectedPages);
-              }
-            }
-          }
-        }
-      }
-    }
-    
     console.log('[API] Facebook pages API response status:', pagesResponse.status);
-    console.log('[API] Response headers:', Object.fromEntries(pagesResponse.headers.entries()));
 
     // If token expired, try to exchange it for a long-lived token
     if (!pagesResponse.ok) {
@@ -230,10 +181,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Parse response
     const responseText = await pagesResponse.text();
     console.log('[API] Raw response text:', responseText.substring(0, 500));
     
-    let pagesData;
+    let pagesData: any;
     try {
       pagesData = JSON.parse(responseText);
     } catch (parseError) {
