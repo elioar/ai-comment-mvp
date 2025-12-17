@@ -99,6 +99,23 @@ export default function PagesPage() {
         
         // Always fetch data when session is available
         fetchData();
+        
+        // If we just came from OAuth, try to refresh the token to ensure it's long-lived
+        if (hasOAuthHash) {
+          setTimeout(async () => {
+            try {
+              const refreshResponse = await fetch('/api/facebook/refresh-token', {
+                method: 'POST',
+              });
+              if (refreshResponse.ok) {
+                console.log('Token refreshed after OAuth');
+                await fetchData(); // Refresh data after token update
+              }
+            } catch (error) {
+              console.error('Error refreshing token after OAuth:', error);
+            }
+          }, 3000); // Wait 3 seconds for NextAuth to save the account
+        }
       };
       
       handleOAuthCallback();

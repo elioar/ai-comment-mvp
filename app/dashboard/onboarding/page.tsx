@@ -49,37 +49,125 @@ export default function OnboardingPage() {
   // Check if Facebook is connected and fetch pages
   useEffect(() => {
     if (session && currentStep === 2) {
-      checkFacebookConnection();
+      // Check for OAuth callback hash
+      const hasOAuthHash = window.location.hash === '#_=_';
+      
+      if (hasOAuthHash) {
+        // Clean up the hash
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        
+        // Wait for NextAuth to process the OAuth callback
+        setTimeout(async () => {
+          // First refresh token, then fetch pages
+          await refreshTokenAndFetchPages();
+          // Also fetch pages directly after a short delay
+          setTimeout(() => {
+            checkFacebookConnection();
+          }, 1000);
+        }, 3000); // Increased wait time to ensure NextAuth has processed
+      } else {
+        checkFacebookConnection();
+      }
     }
   }, [session, currentStep]);
+
+  const refreshTokenAndFetchPages = async () => {
+    try {
+      console.log('Refreshing token and fetching pages...');
+      // Try to refresh the token first
+      const refreshResponse = await fetch('/api/facebook/refresh-token', {
+        method: 'POST',
+      });
+      
+      if (refreshResponse.ok) {
+        console.log('Token refreshed successfully');
+      } else {
+        const refreshData = await refreshResponse.json();
+        console.log('Token refresh response:', refreshData);
+      }
+      
+      // Wait a bit for token to be saved
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Then fetch pages
+      await checkFacebookConnection();
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      // Still try to fetch pages even if refresh fails
+      await checkFacebookConnection();
+    }
+  };
 
   const checkFacebookConnection = async () => {
     setLoading(true);
     setError(null);
     try {
+      console.log('Fetching Facebook pages from API...');
       const response = await fetch('/api/facebook/pages');
+      const data = await response.json();
+      
+      console.log('API Response:', {
+        ok: response.ok,
+        pages: data.pages?.length || 0,
+        connectedPages: data.connectedPages?.length || 0,
+        error: data.error,
+      });
+      
+      // Always set connected pages (they're stored in DB)
+      setConnectedPages(data.connectedPages || []);
+      
+      // ALWAYS set pages if they exist, even if response is not ok
+      if (data.pages && Array.isArray(data.pages)) {
+        setFbPages(data.pages);
+        console.log('Set Facebook pages:', data.pages.length);
+      }
+      
       if (response.ok) {
-        const data = await response.json();
-        setFbPages(data.pages || []);
-        setConnectedPages(data.connectedPages || []);
-        
-        // Check if Facebook account is connected
+        // Success - pages fetched
         if (data.pages && data.pages.length > 0) {
           setFacebookConnected(true);
           // Pre-select already connected pages
           const connectedPageIds = data.connectedPages.map((cp: ConnectedPage) => cp.pageId);
           setSelectedFbPages(connectedPageIds);
-        } else if (data.error && data.error.includes('No Facebook account connected')) {
-          setFacebookConnected(false);
+          setError(null);
+        } else if (data.error) {
+          // Error but check what kind
+          if (data.error.includes('No Facebook account connected')) {
+            setFacebookConnected(false);
+            setError(null);
+          } else {
+            setFacebookConnected(true);
+            setError(data.error);
+          }
         } else {
+          // No pages but no error - account connected but user has no pages
           setFacebookConnected(true);
+          setError(null);
         }
       } else {
-        setError('Failed to check Facebook connection');
+        // Response not ok
+        if (data.pages && data.pages.length > 0) {
+          // We have pages even though response wasn't ok
+          setFacebookConnected(true);
+          setError(null);
+        } else if (data.connectedPages && data.connectedPages.length > 0) {
+          // We have connected pages
+          setFacebookConnected(true);
+          setError(null);
+        } else {
+          setFacebookConnected(data.error?.includes('No Facebook account connected') ? false : true);
+          setError(data.error || 'Failed to fetch pages');
+        }
       }
     } catch (error) {
       console.error('Error checking Facebook connection:', error);
-      setError('Error loading Facebook pages');
+      // If we have connected pages, don't show error
+      if (connectedPages.length > 0) {
+        setFacebookConnected(true);
+        setError(null);
+      } else {
+        setError('Error loading Facebook pages');
+      }
     } finally {
       setLoading(false);
     }
@@ -87,6 +175,20 @@ export default function OnboardingPage() {
 
   const handleFacebookLogin = async () => {
     try {
+      // Store current user ID before OAuth so we can link Facebook to this account
+      if (session?.user?.id) {
+        try {
+          await fetch('/api/auth/set-linking-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: session.user.id }),
+          });
+        } catch (error) {
+          console.error('Error storing linking user:', error);
+          // Still continue with OAuth even if storing fails
+        }
+      }
+      
       await signIn('facebook', { 
         callbackUrl: '/dashboard/onboarding?step=2',
         redirect: true 
@@ -358,11 +460,27 @@ export default function OnboardingPage() {
                     {t('onboarding.facebook.selectPages') || 'Select Pages to Connect'} ({selectedFbPages.length} {t('onboarding.facebook.selected') || 'selected'})
                   </p>
                   
-                  {fbPages.length === 0 ? (
+                  {fbPages.length === 0 && !error ? (
                     <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-xl">
-                      <p className="text-gray-600 dark:text-gray-400">
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">
                         {t('onboarding.facebook.noPages') || 'No Facebook pages found. Make sure you have admin access to at least one page.'}
                       </p>
+                      <button
+                        onClick={checkFacebookConnection}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                      >
+                        Refresh Pages
+                      </button>
+                    </div>
+                  ) : fbPages.length === 0 && error ? (
+                    <div className="text-center py-8 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
+                      <p className="text-red-800 dark:text-red-200 mb-4">{error}</p>
+                      <button
+                        onClick={handleFacebookLogin}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+                      >
+                        Reconnect Facebook
+                      </button>
                     </div>
                   ) : (
                     fbPages.map((page) => {

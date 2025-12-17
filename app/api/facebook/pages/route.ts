@@ -49,15 +49,26 @@ export async function GET(request: NextRequest) {
     // Helper function to exchange token for long-lived token
     const exchangeToken = async (shortLivedToken: string): Promise<string | null> => {
       try {
+        if (!process.env.FACEBOOK_CLIENT_ID || !process.env.FACEBOOK_CLIENT_SECRET) {
+          console.error('Facebook client ID or secret not configured');
+          return null;
+        }
+        
         const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${shortLivedToken}`;
+        console.log('Attempting to exchange Facebook token...');
         const tokenResponse = await fetch(tokenExchangeUrl);
         
         if (tokenResponse.ok) {
           const tokenData = await tokenResponse.json();
           const longLivedToken = tokenData.access_token;
           
+          if (!longLivedToken) {
+            console.error('No access token in exchange response:', tokenData);
+            return null;
+          }
+          
           // Update the stored token in database
-          await prisma.account.updateMany({
+          const updateResult = await prisma.account.updateMany({
             where: {
               id: account.id,
             },
@@ -66,8 +77,11 @@ export async function GET(request: NextRequest) {
             },
           });
           
-          console.log('Successfully refreshed Facebook token');
+          console.log('Successfully refreshed Facebook token, updated rows:', updateResult.count);
           return longLivedToken;
+        } else {
+          const errorText = await tokenResponse.text();
+          console.error('Failed to exchange Facebook token. Status:', tokenResponse.status, 'Error:', errorText);
         }
       } catch (error) {
         console.error('Error exchanging Facebook token:', error);
@@ -77,10 +91,22 @@ export async function GET(request: NextRequest) {
 
     let accessToken = account.access_token;
 
+    // ALWAYS try to exchange token first to ensure we have a long-lived token
+    console.log('Fetching Facebook pages with token (length):', accessToken?.length || 0);
+    
+    // Try to exchange token immediately if it's short-lived
+    const refreshedToken = await exchangeToken(accessToken);
+    if (refreshedToken) {
+      accessToken = refreshedToken;
+      console.log('Token exchanged to long-lived before fetching pages');
+    }
+
     // Fetch user's Facebook pages
     let pagesResponse = await fetch(
       `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`
     );
+    
+    console.log('Facebook pages API response status:', pagesResponse.status);
 
     // If token expired, try to exchange it for a long-lived token
     if (!pagesResponse.ok) {
@@ -127,7 +153,21 @@ export async function GET(request: NextRequest) {
     }
 
     const pagesData = await pagesResponse.json();
+    console.log('Facebook pages API response data:', JSON.stringify(pagesData, null, 2));
+    
+    // Check for errors in response
+    if (pagesData.error) {
+      console.error('Facebook API returned error:', pagesData.error);
+      return NextResponse.json({
+        connectedPages,
+        pages: [],
+        instagramPages: [],
+        error: `Facebook API error: ${pagesData.error.message || 'Unknown error'}`,
+      });
+    }
+    
     const facebookPages = pagesData.data || [];
+    console.log('Found Facebook pages:', facebookPages.length);
 
     // Fetch Instagram Business accounts for each Facebook page
     const instagramPages: any[] = [];
