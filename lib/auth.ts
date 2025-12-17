@@ -104,7 +104,26 @@ export const authOptions = {
             // Store the new user ID before we change it (this is the duplicate created by OAuth)
             const newUserId = user.id;
             
-            // Link the Facebook account to the original user immediately
+            // Exchange short-lived token for long-lived token (60 days)
+            let longLivedToken = account.access_token;
+            try {
+              const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${account.access_token}`;
+              const tokenResponse = await fetch(tokenExchangeUrl);
+              
+              if (tokenResponse.ok) {
+                const tokenData = await tokenResponse.json();
+                longLivedToken = tokenData.access_token;
+                console.log('Successfully exchanged Facebook token for long-lived token');
+              } else {
+                console.error('Failed to exchange Facebook token:', await tokenResponse.text());
+                // Continue with short-lived token - user will need to reconnect later
+              }
+            } catch (tokenError) {
+              console.error('Error exchanging Facebook token:', tokenError);
+              // Continue with short-lived token
+            }
+
+            // Link the Facebook account to the original user immediately with long-lived token
             await prisma.account.updateMany({
               where: {
                 providerAccountId: account.providerAccountId,
@@ -112,6 +131,7 @@ export const authOptions = {
               },
               data: {
                 userId: linkingUserId,
+                access_token: longLivedToken, // Store the long-lived token
               },
             });
 

@@ -46,11 +46,43 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Helper function to exchange token for long-lived token
+    const exchangeToken = async (shortLivedToken: string): Promise<string | null> => {
+      try {
+        const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${shortLivedToken}`;
+        const tokenResponse = await fetch(tokenExchangeUrl);
+        
+        if (tokenResponse.ok) {
+          const tokenData = await tokenResponse.json();
+          const longLivedToken = tokenData.access_token;
+          
+          // Update the stored token in database
+          await prisma.account.updateMany({
+            where: {
+              id: account.id,
+            },
+            data: {
+              access_token: longLivedToken,
+            },
+          });
+          
+          console.log('Successfully refreshed Facebook token');
+          return longLivedToken;
+        }
+      } catch (error) {
+        console.error('Error exchanging Facebook token:', error);
+      }
+      return null;
+    };
+
+    let accessToken = account.access_token;
+
     // Fetch user's Facebook pages
-    const pagesResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me/accounts?access_token=${account.access_token}&fields=id,name,access_token`
+    let pagesResponse = await fetch(
+      `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`
     );
 
+    // If token expired, try to exchange it for a long-lived token
     if (!pagesResponse.ok) {
       const errorText = await pagesResponse.text();
       console.error('Facebook API error:', errorText);
@@ -59,25 +91,39 @@ export async function GET(request: NextRequest) {
       try {
         const errorData = JSON.parse(errorText);
         if (errorData.error?.code === 190 || errorData.error?.type === 'OAuthException') {
-          // Access token expired or invalid
-          console.error('Facebook access token expired or invalid');
-          return NextResponse.json({
-            connectedPages,
-            pages: [],
-            instagramPages: [],
-            error: 'Facebook access token expired. Please reconnect your Facebook account.',
-          });
+          // Access token expired or invalid - try to exchange for long-lived token
+          console.log('Facebook access token expired, attempting to refresh...');
+          const refreshedToken = await exchangeToken(accessToken);
+          
+          if (refreshedToken) {
+            // Retry with refreshed token
+            accessToken = refreshedToken;
+            pagesResponse = await fetch(
+              `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`
+            );
+          } else {
+            // Could not refresh, return error
+            return NextResponse.json({
+              connectedPages,
+              pages: [],
+              instagramPages: [],
+              error: 'Facebook access token expired. Please reconnect your Facebook account.',
+            });
+          }
         }
       } catch (e) {
         // Not JSON, continue with generic error
       }
       
-      return NextResponse.json({
-        connectedPages,
-        pages: [],
-        instagramPages: [],
-        error: 'Failed to fetch pages from Facebook',
-      });
+      // If still not ok after refresh attempt
+      if (!pagesResponse.ok) {
+        return NextResponse.json({
+          connectedPages,
+          pages: [],
+          instagramPages: [],
+          error: 'Failed to fetch pages from Facebook',
+        });
+      }
     }
 
     const pagesData = await pagesResponse.json();
