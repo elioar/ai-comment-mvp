@@ -759,11 +759,43 @@ export default function PagesPage() {
                   </div>
                 )}
 
-                {pages.length === 0 && instagramPages.length === 0 && (
-                  <div className="text-center py-12">
-                    <p className="text-gray-500 dark:text-gray-400">
-                      No pages found. Make sure your Facebook account has pages or Instagram Business accounts connected.
+                {pages.length === 0 && instagramPages.length === 0 && connectedPages.length === 0 && (
+                  <div className="text-center py-12 bg-gray-50 dark:bg-gray-900 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-8">
+                    <svg className="w-16 h-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      No Facebook Pages Found
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">
+                      Your Facebook account is connected, but you don't have any pages yet.
                     </p>
+                    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4 text-left max-w-md mx-auto">
+                      <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">To use this app, you need to:</p>
+                      <ol className="text-sm text-blue-800 dark:text-blue-300 space-y-2 list-decimal list-inside">
+                        <li>Create a Facebook Page, OR</li>
+                        <li>Get admin access to an existing Facebook Page</li>
+                      </ol>
+                    </div>
+                    <a
+                      href="https://www.facebook.com/pages/create"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg mb-4"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                      </svg>
+                      Create a Facebook Page
+                    </a>
+                    <div>
+                      <button
+                        onClick={fetchData}
+                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm"
+                      >
+                        Refresh Pages
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
