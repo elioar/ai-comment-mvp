@@ -92,21 +92,30 @@ export async function GET(request: NextRequest) {
     let accessToken = account.access_token;
 
     // ALWAYS try to exchange token first to ensure we have a long-lived token
-    console.log('Fetching Facebook pages with token (length):', accessToken?.length || 0);
+    console.log('[API] Fetching Facebook pages for user:', session.user.id);
+    console.log('[API] Current token length:', accessToken?.length || 0);
+    console.log('[API] Token preview:', accessToken ? `${accessToken.substring(0, 20)}...` : 'NO TOKEN');
     
     // Try to exchange token immediately if it's short-lived
+    console.log('[API] Attempting token exchange...');
     const refreshedToken = await exchangeToken(accessToken);
     if (refreshedToken) {
       accessToken = refreshedToken;
-      console.log('Token exchanged to long-lived before fetching pages');
+      console.log('[API] ✅ Token exchanged to long-lived before fetching pages');
+      console.log('[API] New token length:', accessToken.length);
+    } else {
+      console.log('[API] ⚠️ Token exchange failed or skipped, using original token');
     }
 
     // Fetch user's Facebook pages
-    let pagesResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`
-    );
+    const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`;
+    console.log('[API] Fetching pages from Facebook API...');
+    console.log('[API] URL:', pagesUrl.replace(accessToken, '[TOKEN]'));
     
-    console.log('Facebook pages API response status:', pagesResponse.status);
+    let pagesResponse = await fetch(pagesUrl);
+    
+    console.log('[API] Facebook pages API response status:', pagesResponse.status);
+    console.log('[API] Response headers:', Object.fromEntries(pagesResponse.headers.entries()));
 
     // If token expired, try to exchange it for a long-lived token
     if (!pagesResponse.ok) {
@@ -152,12 +161,32 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const pagesData = await pagesResponse.json();
-    console.log('Facebook pages API response data:', JSON.stringify(pagesData, null, 2));
+    const responseText = await pagesResponse.text();
+    console.log('[API] Raw response text:', responseText.substring(0, 500));
+    
+    let pagesData;
+    try {
+      pagesData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('[API] ❌ Failed to parse response as JSON:', parseError);
+      console.error('[API] Response text:', responseText);
+      return NextResponse.json({
+        connectedPages,
+        pages: [],
+        instagramPages: [],
+        error: 'Invalid response from Facebook API',
+      });
+    }
+    
+    console.log('[API] Parsed response data:', JSON.stringify(pagesData, null, 2));
     
     // Check for errors in response
     if (pagesData.error) {
-      console.error('Facebook API returned error:', pagesData.error);
+      console.error('[API] ❌ Facebook API returned error:', pagesData.error);
+      console.error('[API] Error code:', pagesData.error.code);
+      console.error('[API] Error type:', pagesData.error.type);
+      console.error('[API] Error message:', pagesData.error.message);
+      
       return NextResponse.json({
         connectedPages,
         pages: [],
@@ -167,7 +196,16 @@ export async function GET(request: NextRequest) {
     }
     
     const facebookPages = pagesData.data || [];
-    console.log('Found Facebook pages:', facebookPages.length);
+    console.log('[API] ✅ Found Facebook pages:', facebookPages.length);
+    
+    if (facebookPages.length > 0) {
+      console.log('[API] Page names:', facebookPages.map((p: any) => p.name));
+    } else {
+      console.log('[API] ⚠️ No pages found. This could mean:');
+      console.log('[API]   1. User has no Facebook pages');
+      console.log('[API]   2. User doesn\'t have admin access to any pages');
+      console.log('[API]   3. Token doesn\'t have required permissions');
+    }
 
     // Fetch Instagram Business accounts for each Facebook page
     const instagramPages: any[] = [];
@@ -209,7 +247,7 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    return NextResponse.json({
+    const response = {
       connectedPages,
       pages: facebookPages.map((page: any) => ({
         ...page,
@@ -219,7 +257,15 @@ export async function GET(request: NextRequest) {
         ...page,
         provider: 'instagram',
       })),
+    };
+    
+    console.log('[API] ✅ Returning response with:', {
+      connectedPages: response.connectedPages.length,
+      pages: response.pages.length,
+      instagramPages: response.instagramPages.length,
     });
+    
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error fetching Facebook pages:', error);
     return NextResponse.json(
