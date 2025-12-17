@@ -470,7 +470,7 @@ export default function PagesPage() {
               <div className="flex items-center justify-center py-12">
                 <div className="w-12 h-12 border-4 border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin"></div>
               </div>
-            ) : pages.length === 0 ? (
+                ) : pages.length === 0 && instagramPages.length === 0 && connectedPages.length === 0 ? (
               <div className="max-w-2xl mx-auto">
                 <div className="bg-white dark:bg-gray-950 rounded-2xl border border-gray-200 dark:border-gray-800 p-12 text-center shadow-sm">
                   <div className="mb-6">
@@ -528,7 +528,7 @@ export default function PagesPage() {
                   </p>
                 </div>
 
-                {(pages.length > 0 || instagramPages.length > 0) && (
+                {(pages.length > 0 || instagramPages.length > 0 || connectedPages.length > 0) && (
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {/* Facebook Pages */}
                     {pages.map((page) => {

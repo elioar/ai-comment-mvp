@@ -36,10 +36,13 @@ export async function GET(request: NextRequest) {
     });
 
     if (!account?.access_token) {
+      // Return connected pages even if Facebook account is not connected
+      // This allows users to see previously connected pages
       return NextResponse.json({
         connectedPages,
         pages: [],
-        error: 'No Facebook account connected',
+        instagramPages: [],
+        error: connectedPages.length > 0 ? undefined : 'No Facebook account connected',
       });
     }
 
