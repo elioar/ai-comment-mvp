@@ -1,4 +1,4 @@
-cleare'use client';
+'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useSession, signOut, signIn } from 'next-auth/react';
