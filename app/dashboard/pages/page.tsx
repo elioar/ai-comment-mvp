@@ -179,24 +179,31 @@ export default function PagesPage() {
         const facebookPage = page as FacebookPage;
         pageName = facebookPage.name;
       }
+      const requestBody = {
+        pageId: page.id,
+        pageName: pageName,
+        pageAccessToken: page.access_token,
+        provider: provider,
+      };
+
+      console.log('Connecting page:', { pageId: page.id, pageName, provider });
+
       const response = await fetch('/api/facebook/pages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          pageId: page.id,
-          pageName: pageName,
-          pageAccessToken: page.access_token,
-          provider: provider,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
+      const responseData = await response.json();
+
       if (response.ok) {
+        console.log('Page connected successfully:', responseData);
         await fetchData();
       } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to connect page');
+        console.error('Failed to connect page:', responseData);
+        setError(responseData.error || responseData.details || 'Failed to connect page');
       }
     } catch (error) {
       console.error('Error connecting page:', error);

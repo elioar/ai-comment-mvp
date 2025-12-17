@@ -144,33 +144,54 @@ export async function POST(request: NextRequest) {
     }
 
     // Store connected page
-    const connectedPage = await prisma.connectedPage.upsert({
-      where: {
-        userId_pageId_provider: {
+    try {
+      const connectedPage = await prisma.connectedPage.upsert({
+        where: {
+          userId_pageId_provider: {
+            userId: session.user.id,
+            pageId,
+            provider,
+          },
+        },
+        update: {
+          pageName,
+          pageAccessToken,
+          updatedAt: new Date(),
+        },
+        create: {
           userId: session.user.id,
           pageId,
+          pageName,
+          pageAccessToken,
           provider,
         },
-      },
-      update: {
-        pageName,
-        pageAccessToken,
-        updatedAt: new Date(),
-      },
-      create: {
-        userId: session.user.id,
-        pageId,
-        pageName,
-        pageAccessToken,
-        provider,
-      },
-    });
+      });
 
-    return NextResponse.json({ success: true, page: connectedPage });
-  } catch (error) {
+      console.log('Page connected successfully:', { pageId, pageName, provider, userId: session.user.id });
+      return NextResponse.json({ success: true, page: connectedPage });
+    } catch (dbError: any) {
+      console.error('Database error connecting page:', dbError);
+      // Check for unique constraint violation
+      if (dbError.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'Page is already connected' },
+          { status: 409 }
+        );
+      }
+      throw dbError; // Re-throw to be caught by outer catch
+    }
+  } catch (error: any) {
     console.error('Error connecting page:', error);
+    console.error('Error details:', {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack,
+    });
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: error?.message || 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+      },
       { status: 500 }
     );
   }
