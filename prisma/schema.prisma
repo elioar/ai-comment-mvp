@@ -59,16 +59,17 @@ model VerificationToken {
 }
 
 model ConnectedPage {
-  id                String   @id @default(cuid())
-  userId            String
-  pageId            String   // Facebook Page ID
-  pageName          String
-  pageAccessToken   String   // Long-lived access token for the page
-  provider          String   @default("facebook") // "facebook" or "instagram"
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  comments          Comment[]
+  id                    String    @id @default(cuid())
+  userId                String
+  pageId                String    // Facebook Page ID
+  pageName              String
+  pageAccessToken       String    // Long-lived access token for the page
+  provider              String    @default("facebook") // "facebook" or "instagram"
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  lastCommentsFetchedAt DateTime? // Timestamp of last successful comment fetch
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments              Comment[]
 
   @@unique([userId, pageId, provider])
 }

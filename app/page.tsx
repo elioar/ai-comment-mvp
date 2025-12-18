@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useSession } from 'next-auth/react';
 import { ProfileDropdown } from '@/components/ui/ProfileDropdown';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Home() {
   const { t, i18n } = useTranslation();
@@ -180,52 +181,138 @@ export default function Home() {
       </header>
 
       {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9998] lg:hidden"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          <div className="fixed top-0 right-0 h-full w-[320px] max-w-[85vw] bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl z-[9999] lg:hidden border-l border-gray-200 dark:border-white/10">
-            <div className="flex flex-col h-full p-6">
-              <div className="flex items-center justify-between mb-8">
-                <span className="text-lg font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                  Menu
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-md z-[9998] lg:hidden"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            
+            {/* Menu Panel */}
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ 
+                type: 'spring', 
+                damping: 25, 
+                stiffness: 200,
+                duration: 0.3
+              }}
+              className="fixed top-0 left-0 h-full w-[280px] max-w-[80vw] bg-white dark:bg-gray-950 backdrop-blur-2xl z-[9999] lg:hidden border-r border-gray-100 dark:border-white/5 shadow-[0_0_50px_rgba(0,0,0,0.1)]"
+            >
+              <div className="flex flex-col h-full">
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-white/5">
+                  <Link href="/" className="flex items-center gap-2.5" onClick={() => setMobileMenuOpen(false)}>
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-violet-600 rounded-lg flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                      </svg>
+                    </div>
+                    <span className="text-base font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+                      {t('landing.logo')}
                     </span>
+                  </Link>
                   <button
                     onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all"
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-all"
+                    aria-label="Close menu"
                   >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
-              <nav className="flex flex-col gap-4">
-                <a href="#features" onClick={() => setMobileMenuOpen(false)} className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-all font-medium">
-                  {t('landing.navigation.features')}
-                </a>
-                <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-all font-medium">
-                  {t('landing.navigation.pricing')}
-                </a>
-                <a href="#testimonials" onClick={() => setMobileMenuOpen(false)} className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-all font-medium">
-                  {t('landing.navigation.testimonials')}
-                </a>
+
+                {/* Navigation */}
+                <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+                  <a 
+                    href="#features" 
+                    onClick={() => setMobileMenuOpen(false)} 
+                    className="block px-4 py-3 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl transition-all font-medium text-sm"
+                  >
+                    {t('landing.navigation.features')}
+                  </a>
+                  <a 
+                    href="#pricing" 
+                    onClick={() => setMobileMenuOpen(false)} 
+                    className="block px-4 py-3 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl transition-all font-medium text-sm"
+                  >
+                    {t('landing.navigation.pricing')}
+                  </a>
+                  <a 
+                    href="#testimonials" 
+                    onClick={() => setMobileMenuOpen(false)} 
+                    className="block px-4 py-3 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl transition-all font-medium text-sm"
+                  >
+                    {t('landing.navigation.testimonials')}
+                  </a>
+                </nav>
+
+                {/* Language Toggle */}
+                <div className="px-4 py-4 border-t border-gray-100 dark:border-white/5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <button
+                      onClick={() => changeLanguage('en')}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        currentLanguage === 'en' || currentLanguage.startsWith('en')
+                          ? 'bg-blue-600 dark:bg-blue-500 text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      EN
+                    </button>
+                    <button
+                      onClick={() => changeLanguage('el')}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        currentLanguage === 'el' || currentLanguage.startsWith('el')
+                          ? 'bg-blue-600 dark:bg-blue-500 text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      ΕΛ
+                    </button>
+                  </div>
+                </div>
+
+                {/* Auth Buttons */}
                 {!session && (
-                  <>
-                    <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-all font-medium text-center">
+                  <div className="px-4 pb-6 space-y-2">
+                    <Link 
+                      href="/login" 
+                      onClick={() => setMobileMenuOpen(false)} 
+                      className="block w-full px-4 py-3 text-center text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl transition-all font-medium text-sm"
+                    >
                       {t('header.signIn')}
                     </Link>
-                    <Link href="/register" onClick={() => setMobileMenuOpen(false)} className="px-4 py-3 bg-gradient-to-r from-blue-500 to-violet-600 hover:from-blue-600 hover:to-violet-700 text-white rounded-lg transition-all font-medium text-center shadow-lg shadow-blue-500/50">
-                      Start Free
+                    <Link 
+                      href="/register" 
+                      onClick={() => setMobileMenuOpen(false)} 
+                      className="block w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-violet-600 hover:from-blue-600 hover:to-violet-700 text-white rounded-xl transition-all font-medium text-sm text-center shadow-lg shadow-blue-500/30"
+                    >
+                      {t('landing.startFreeTrial')}
                     </Link>
-                  </>
+                  </div>
                 )}
-              </nav>
-            </div>
-          </div>
-        </>
-      )}
+
+                {/* Profile Dropdown for logged in users */}
+                {session && (
+                  <div className="px-4 pb-6">
+                    <ProfileDropdown />
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <main className="pt-20">
         {/* Hero Section */}

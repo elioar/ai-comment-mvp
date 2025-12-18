@@ -442,6 +442,40 @@
     },
     "pages": {
       "description": "Connect and manage your Facebook pages. Select which pages you want to monitor and respond to comments automatically."
+    },
+    "comments": {
+      "title": "Comments",
+      "description": "Manage and respond to comments from your connected pages",
+      "noPageSelected": "No page selected",
+      "goToPages": "Go to Pages",
+      "loadingComments": "Loading comments...",
+      "noCommentsYet": "No comments yet",
+      "noCommentsDescription": "Click \"Refresh Comments\" to fetch comments from your connected page.",
+      "refreshComments": "Refresh Comments",
+      "refresh": "Refresh",
+      "fetching": "Fetching...",
+      "totalComments": "total comments",
+      "pending": "pending",
+      "replied": "replied",
+      "ignored": "ignored",
+      "justNow": "Just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago",
+      "replyWithAI": "Reply with AI",
+      "ignore": "Ignore",
+      "newComment": "new comment",
+      "newComments": "new comments",
+      "showPost": "Show Post",
+      "hidePost": "Hide Post",
+      "originalPost": "Original Post",
+      "fetchedSuccessfully": "{{count}} {{count, plural, one {comment} other {comments}}} fetched successfully!",
+      "lastFetched": "Last fetched",
+      "never": "Never",
+      "failedToFetch": "Failed to fetch comments",
+      "errorLoading": "Error loading comments",
+      "failedToRefresh": "Failed to refresh comments",
+      "errorRefreshing": "Error refreshing comments"
     }
   }
 }

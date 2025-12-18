@@ -442,6 +442,40 @@
     },
     "pages": {
       "description": "Συνδέστε και διαχειριστείτε τις σελίδες σας στο Facebook. Επιλέξτε ποιες σελίδες θέλετε να παρακολουθήσετε και να απαντάτε αυτόματα σε σχόλια."
+    },
+    "comments": {
+      "title": "Σχόλια",
+      "description": "Διαχειριστείτε και απαντήστε σε σχόλια από τις συνδεδεμένες σελίδες σας",
+      "noPageSelected": "Δεν έχει επιλεγεί σελίδα",
+      "goToPages": "Μετάβαση στις Σελίδες",
+      "loadingComments": "Φόρτωση σχολίων...",
+      "noCommentsYet": "Δεν υπάρχουν ακόμα σχόλια",
+      "noCommentsDescription": "Κάντε κλικ στο \"Ανανέωση Σχολίων\" για να φέρετε σχόλια από τη συνδεδεμένη σελίδα σας.",
+      "refreshComments": "Ανανέωση Σχολίων",
+      "refresh": "Ανανέωση",
+      "fetching": "Ανάκτηση...",
+      "totalComments": "συνολικά σχόλια",
+      "pending": "σε αναμονή",
+      "replied": "απαντήθηκε",
+      "ignored": "αγνοήθηκε",
+      "justNow": "Μόλις τώρα",
+      "minutesAgo": "{{count}}λ πριν",
+      "hoursAgo": "{{count}}ω πριν",
+      "daysAgo": "{{count}}η πριν",
+      "replyWithAI": "Απάντηση με AI",
+      "ignore": "Αγνόηση",
+      "newComment": "νέο σχόλιο",
+      "newComments": "νέα σχόλια",
+      "showPost": "Εμφάνιση Δημοσίευσης",
+      "hidePost": "Απόκρυψη Δημοσίευσης",
+      "originalPost": "Αρχική Δημοσίευση",
+      "fetchedSuccessfully": "{{count}} {{count, plural, one {σχόλιο} other {σχόλια}}} ανακτήθηκε με επιτυχία!",
+      "lastFetched": "Τελευταία ανάκτηση",
+      "never": "Ποτέ",
+      "failedToFetch": "Αποτυχία ανάκτησης σχολίων",
+      "errorLoading": "Σφάλμα φόρτωσης σχολίων",
+      "failedToRefresh": "Αποτυχία ανανέωσης σχολίων",
+      "errorRefreshing": "Σφάλμα ανανέωσης σχολίων"
     }
   }
 }

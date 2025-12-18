@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signOut, signIn } from 'next-auth/react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -16,6 +16,9 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState<string>('en');
   const [mounted, setMounted] = useState(false);
+  const [connectedPages, setConnectedPages] = useState<any[]>([]);
+  const [loadingPages, setLoadingPages] = useState(true);
+  const [hasFacebookAccount, setHasFacebookAccount] = useState(false);
 
   // Mount component to avoid hydration mismatch
   useEffect(() => {
@@ -39,6 +42,28 @@ export default function DashboardPage() {
       router.push('/login');
     }
   }, [status, router]);
+
+  // Fetch connected pages to check if empty state should be shown
+  useEffect(() => {
+    if (session?.user?.id) {
+      const fetchConnectedPages = async () => {
+        try {
+          const response = await fetch('/api/facebook/pages');
+          const data = await response.json();
+          if (data.connectedPages && Array.isArray(data.connectedPages)) {
+            setConnectedPages(data.connectedPages);
+          }
+          // Check if user has an active Facebook account (not just connected pages)
+          setHasFacebookAccount(data.pages && data.pages.length > 0);
+        } catch (error) {
+          console.error('Error fetching connected pages:', error);
+        } finally {
+          setLoadingPages(false);
+        }
+      };
+      fetchConnectedPages();
+    }
+  }, [session]);
 
   if (status === 'loading') {
     return (
@@ -244,6 +269,66 @@ export default function DashboardPage() {
             })}
           </nav>
 
+          {/* Language Toggle */}
+          <div className="px-3 py-4 border-t border-gray-200 dark:border-gray-900">
+            <div className="px-3 mb-2">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                {t('dashboard.preferences.language')}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => changeLanguage('en')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                    currentLanguage === 'en' || currentLanguage.startsWith('en')
+                      ? 'bg-blue-600 dark:bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900'
+                  }`}
+                >
+                  EN
+                </button>
+                <button
+                  onClick={() => changeLanguage('el')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                    currentLanguage === 'el' || currentLanguage.startsWith('el')
+                      ? 'bg-blue-600 dark:bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900'
+                  }`}
+                >
+                  ΕΛ
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Theme Toggle */}
+          <div className="px-3 py-4 border-t border-gray-200 dark:border-gray-900">
+            <div className="px-3">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                {t('dashboard.preferences.theme')}
+              </p>
+              <button
+                onClick={toggleTheme}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 rounded-lg transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  {theme === 'light' ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  )}
+                  <span>{theme === 'light' ? t('dashboard.preferences.darkMode') : t('dashboard.preferences.lightMode')}</span>
+                </div>
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
           {/* Footer User Info */}
           <div className="p-4 border-t border-gray-200 dark:border-gray-900">
             <div className="flex items-center gap-3 px-3 py-2">
@@ -288,47 +373,6 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Language Toggle */}
-              <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-900 rounded-lg">
-                <button
-                  onClick={() => changeLanguage('en')}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
-                    currentLanguage === 'en' || currentLanguage.startsWith('en')
-                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  EN
-                </button>
-                <button
-                  onClick={() => changeLanguage('el')}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded transition-all ${
-                    currentLanguage === 'el' || currentLanguage.startsWith('el')
-                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  ΕΛ
-                </button>
-              </div>
-
-              {/* Theme Toggle */}
-              <button
-                onClick={toggleTheme}
-                className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900 rounded-lg transition-all"
-                title={theme === 'light' ? t('dashboard.preferences.darkMode') : t('dashboard.preferences.lightMode')}
-              >
-                {theme === 'light' ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                )}
-              </button>
-
               {/* Notifications */}
               <button className="relative p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900 rounded-lg transition-all">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -344,8 +388,9 @@ export default function DashboardPage() {
         </header>
 
         {/* Empty State - No Pages Added */}
-        <main className="min-h-[calc(100vh-80px)] flex items-center justify-center p-4 sm:p-6 lg:p-8">
-          <div className="max-w-2xl w-full text-center">
+        {!loadingPages && connectedPages.length === 0 ? (
+          <main className="min-h-[calc(100vh-80px)] flex items-center justify-center p-4 sm:p-6 lg:p-8">
+            <div className="max-w-2xl w-full text-center">
             {/* Animated Icon */}
             <div className="relative mb-8">
               <div className="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-violet-400/20 dark:from-blue-500/10 dark:to-violet-500/10 rounded-full blur-3xl"></div>
@@ -444,6 +489,63 @@ export default function DashboardPage() {
             </div>
           </div>
         </main>
+        ) : (
+          <main className="min-h-[calc(100vh-80px)] p-4 sm:p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto">
+              {loadingPages ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-12 h-12 border-4 border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin"></div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                    Welcome back! 👋
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mb-6">
+                    You have {connectedPages.length} connected page{connectedPages.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                    <Link
+                      href="/dashboard/pages"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
+                    >
+                      Manage Pages
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </Link>
+                    {!hasFacebookAccount && (
+                      <button
+                        onClick={async () => {
+                          // Store current user ID before OAuth so we can link Facebook to this account
+                          if (session?.user?.id) {
+                            try {
+                              await fetch('/api/auth/set-linking-user', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ userId: session.user.id }),
+                              });
+                            } catch (error) {
+                              console.error('Error storing linking user:', error);
+                              // Still continue with OAuth even if storing fails
+                            }
+                          }
+                          await signIn('facebook', { callbackUrl: '/dashboard' });
+                        }}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                        </svg>
+                        Connect Facebook Account
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </main>
+        )}
       </div>
     </div>
   );

@@ -13,6 +13,8 @@ export const authOptions = {
   // It won't interfere with JWT sessions
   adapter: PrismaAdapter(prisma) as any,
   trustHost: true,
+  // Ensure NEXTAUTH_URL is set for production
+  ...(process.env.NEXTAUTH_URL && { url: process.env.NEXTAUTH_URL }),
   providers: [
     CredentialsProvider({
       name: 'Credentials',

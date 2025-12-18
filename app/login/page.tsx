@@ -28,6 +28,30 @@ export default function LoginPage() {
     setMounted(true);
   }, []);
 
+  // Check for OAuth errors in URL
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const error = params.get('error');
+      
+      if (error === 'Configuration') {
+        setAlertMessage({
+          type: 'error',
+          message: 'Facebook OAuth is not properly configured. Please check that FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET are set in your environment variables.',
+        });
+        // Clean up URL
+        window.history.replaceState({}, '', '/login');
+      } else if (error) {
+        setAlertMessage({
+          type: 'error',
+          message: `Authentication error: ${error}. Please try again or contact support.`,
+        });
+        // Clean up URL
+        window.history.replaceState({}, '', '/login');
+      }
+    }
+  }, []);
+
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
