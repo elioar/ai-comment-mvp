@@ -137,17 +137,31 @@ export async function GET(request: NextRequest) {
     
     if (!meResponse.ok) {
       const meErrorText = await meResponse.text();
-      console.error('[API] ❌ Token validation failed:', meErrorText);
-      return NextResponse.json({
-        connectedPages,
-        pages: [],
-        instagramPages: [],
-        error: 'Facebook token is invalid. Please reconnect your Facebook account.',
-      });
+      let meErrorData: any = {};
+      try {
+        meErrorData = JSON.parse(meErrorText);
+      } catch (e) {
+        // Not JSON, use as string
+      }
+      
+      // Check if it's a rate limit error (code 4, is_transient: true)
+      if (meErrorData.error?.code === 4 && meErrorData.error?.is_transient === true) {
+        console.warn('[API] ⚠️ Facebook rate limit reached. Skipping token verification and continuing...');
+        console.warn('[API] Rate limit will reset automatically. This is temporary.');
+        // Continue without verification - rate limit is temporary
+      } else {
+        console.error('[API] ❌ Token validation failed:', meErrorText);
+        return NextResponse.json({
+          connectedPages,
+          pages: [],
+          instagramPages: [],
+          error: 'Facebook token is invalid. Please reconnect your Facebook account.',
+        });
+      }
+    } else {
+      const meData = await meResponse.json();
+      console.log('[API] ✅ Token is valid for user:', meData.name || meData.id);
     }
-    
-    const meData = await meResponse.json();
-    console.log('[API] ✅ Token is valid for user:', meData.name || meData.id);
 
     // Fetch user's Facebook pages
     // Fetch user's Facebook pages
@@ -231,6 +245,20 @@ export async function GET(request: NextRequest) {
       console.error('[API] Error type:', pagesData.error.type);
       console.error('[API] Error message:', pagesData.error.message);
       
+      // Check if it's a rate limit error (code 4, is_transient: true)
+      if (pagesData.error.code === 4 && pagesData.error.is_transient === true) {
+        console.warn('[API] ⚠️ Facebook rate limit reached. Returning connected pages from database.');
+        // Return connected pages from database even if we can't fetch new ones
+        // This allows the app to continue working
+        return NextResponse.json({
+          connectedPages,
+          pages: [],
+          instagramPages: [],
+          error: 'Facebook API rate limit reached. Please try again in a few minutes. Your connected pages are still available.',
+          rateLimited: true,
+        });
+      }
+      
       return NextResponse.json({
         connectedPages,
         pages: [],
@@ -273,6 +301,32 @@ export async function GET(request: NextRequest) {
                 console.log(`[API] ✅ Refreshed page token for ${page.name} with updated permissions`);
               } else {
                 console.warn(`[API] ⚠️ Fresh token for ${page.name} still missing pages_read_engagement`);
+              }
+            } else {
+              // Check if it's a rate limit error
+              const errorText = await debugResponse.text();
+              let errorData: any = {};
+              try {
+                errorData = JSON.parse(errorText);
+              } catch (e) {
+                // Not JSON
+              }
+              
+              if (errorData.error?.code === 4 && errorData.error?.is_transient === true) {
+                console.warn(`[API] ⚠️ Rate limit reached while verifying token for ${page.name}. Skipping verification.`);
+                // Still update the token even if we can't verify it (rate limit is temporary)
+                await prisma.connectedPage.updateMany({
+                  where: {
+                    id: existingPage.id,
+                  },
+                  data: {
+                    pageAccessToken: page.access_token,
+                    updatedAt: new Date(),
+                  },
+                });
+                console.log(`[API] ✅ Updated page token for ${page.name} (verification skipped due to rate limit)`);
+              } else {
+                console.warn(`[API] ⚠️ Failed to verify token for ${page.name}:`, errorText.substring(0, 200));
               }
             }
           }

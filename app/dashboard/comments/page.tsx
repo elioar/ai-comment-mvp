@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, Suspense, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -43,6 +43,8 @@ function CommentsPageContent() {
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({});
   const [refreshingTokens, setRefreshingTokens] = useState(false);
   const pageId = searchParams.get('pageId');
+  const hasInitialFetch = useRef(false);
+  const lastFetchedPageId = useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -67,7 +69,14 @@ function CommentsPageContent() {
 
   useEffect(() => {
     if (session && pageId) {
-      fetchComments();
+      // Only fetch if:
+      // 1. We haven't done initial fetch yet, OR
+      // 2. The pageId has changed (user selected a different page)
+      if (!hasInitialFetch.current || lastFetchedPageId.current !== pageId) {
+        hasInitialFetch.current = true;
+        lastFetchedPageId.current = pageId;
+        fetchComments();
+      }
     }
   }, [session, pageId]);
 

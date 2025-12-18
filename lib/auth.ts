@@ -77,13 +77,13 @@ export const authOptions = {
     ...(process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET
       ? [
           FacebookProvider({
-            clientId: process.env.FACEBOOK_CLIENT_ID,
-            clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
-                authorization: {
-                  params: {
-                    scope: 'pages_read_engagement pages_show_list pages_manage_posts instagram_basic instagram_manage_comments business_management',
-                  },
-                },
+            clientId: process.env.FACEBOOK_CLIENT_ID!,
+            clientSecret: process.env.FACEBOOK_CLIENT_SECRET!,
+            authorization: {
+              params: {
+                scope: 'pages_read_engagement pages_show_list pages_manage_posts instagram_basic instagram_manage_comments business_management',
+              },
+            },
           }),
         ]
       : []),

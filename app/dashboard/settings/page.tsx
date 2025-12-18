@@ -481,20 +481,28 @@ export default function SettingsPage() {
                       // Check if Facebook is configured before attempting OAuth
                       try {
                         const configCheck = await fetch('/api/auth/check-facebook-config');
-                        const config = await configCheck.json();
                         
-                        if (!config.configured) {
-                          const missing = [];
-                          if (!config.details.hasClientId) missing.push('FACEBOOK_CLIENT_ID');
-                          if (!config.details.hasClientSecret) missing.push('FACEBOOK_CLIENT_SECRET');
-                          if (!config.details.hasNextAuthUrl) missing.push('NEXTAUTH_URL');
-                          if (!config.details.hasNextAuthSecret) missing.push('NEXTAUTH_SECRET');
+                        if (!configCheck.ok) {
+                          console.error('Config check failed with status:', configCheck.status);
+                          // Continue anyway - let NextAuth handle the error
+                        } else {
+                          const config = await configCheck.json();
                           
-                          alert(`Facebook OAuth is not configured. Missing environment variables:\n\n${missing.map(key => `- ${key}: ${config.required[key]}`).join('\n')}\n\nPlease add these to your Vercel environment variables and redeploy.`);
-                          return;
+                          if (!config.configured) {
+                            const missing = [];
+                            if (!config.details.hasClientId) missing.push('FACEBOOK_CLIENT_ID');
+                            if (!config.details.hasClientSecret) missing.push('FACEBOOK_CLIENT_SECRET');
+                            if (!config.details.hasNextAuthUrl) missing.push('NEXTAUTH_URL');
+                            if (!config.details.hasNextAuthSecret) missing.push('NEXTAUTH_SECRET');
+                            
+                            alert(`Facebook OAuth is not configured. Missing environment variables:\n\n${missing.map(key => `- ${key}: ${config.required[key]}`).join('\n')}\n\nPlease add these to your Vercel environment variables and redeploy.`);
+                            return;
+                          }
                         }
                       } catch (error) {
                         console.error('Error checking Facebook config:', error);
+                        // Continue anyway - let NextAuth handle the error
+                        // The server-side check will catch any real configuration issues
                       }
 
                       // Store current user ID before OAuth so we can link Facebook to this account
