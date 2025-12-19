@@ -3,15 +3,17 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { ProfileDropdown } from '@/components/ui/ProfileDropdown';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Home() {
   const { t, i18n } = useTranslation();
   const { theme, toggleTheme } = useTheme();
   const { data: session } = useSession();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState<string>('en');
   const [mounted, setMounted] = useState(false);
@@ -64,79 +66,93 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-black dark:to-gray-950 text-gray-900 dark:text-white transition-colors">
       {/* Header */}
-      <header className="fixed top-0 w-full z-50 border-b border-gray-200 dark:border-white/10 bg-white/80 dark:bg-black/50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
+      <header className="fixed top-0 w-full z-50 bg-white/95 dark:bg-gray-950/95 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800/50 shadow-sm">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16 sm:h-20 gap-4">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-3 group">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 group flex-shrink-0">
               <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-violet-600 rounded-xl blur-lg opacity-75 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative w-10 h-10 bg-gradient-to-br from-blue-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/50">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
+                <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition-opacity duration-300"></div>
+                <div className="relative w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500 via-blue-600 to-violet-600 rounded-xl flex items-center justify-center shadow-md shadow-blue-500/30 group-hover:shadow-lg group-hover:shadow-blue-500/50 transition-all duration-300 group-hover:scale-105">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
                 </div>
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                {t('landing.logo')}
-              </span>
+              <div className="flex flex-col">
+                <span className="text-base sm:text-lg md:text-xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent leading-tight">
+                  My Comments
+                </span>
+                <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium hidden sm:block">
+                  AI-Powered Management
+                </span>
+              </div>
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex items-center gap-8">
-              <a href="#features" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-medium">{t('landing.navigation.features')}</a>
-              <a href="#pricing" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-medium">{t('landing.navigation.pricing')}</a>
-              <a href="#testimonials" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors font-medium">{t('landing.navigation.testimonials')}</a>
+            <nav className="hidden lg:flex items-center gap-0.5">
+              <a 
+                href="#features" 
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 rounded-lg transition-all duration-200"
+              >
+                {t('landing.navigation.features')}
+              </a>
+              <a 
+                href="#pricing" 
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 rounded-lg transition-all duration-200"
+              >
+                {t('landing.navigation.pricing')}
+              </a>
+              <a 
+                href="#testimonials" 
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 rounded-lg transition-all duration-200"
+              >
+                {t('landing.navigation.testimonials')}
+              </a>
+              
+              {/* Divider */}
+              <div className="h-6 w-px bg-gray-200 dark:bg-gray-800 mx-2"></div>
               
               {/* Language Toggle */}
-              <div className="flex items-center gap-2 border-l border-gray-200 dark:border-white/10 pl-6">
+              <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-900/50 p-1 rounded-lg">
                 <button
                   onClick={() => changeLanguage('en')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 ${
                     currentLanguage === 'en' || currentLanguage.startsWith('en')
-                      ? 'bg-blue-600 dark:bg-white/10 text-white shadow-lg'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
                   EN
                 </button>
                 <button
                   onClick={() => changeLanguage('el')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 ${
                     currentLanguage === 'el' || currentLanguage.startsWith('el')
-                      ? 'bg-blue-600 dark:bg-white/10 text-white shadow-lg'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5'
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
                   ΕΛ
                 </button>
               </div>
 
-              {/* Theme Toggle */}
-              <button
-                onClick={toggleTheme}
-                className="p-2.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
-                aria-label="Toggle theme"
-              >
-                {theme === 'light' ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                )}
-              </button>
-
               {session ? (
-                <ProfileDropdown />
+                <div className="ml-2">
+                  <ProfileDropdown />
+                </div>
               ) : (
-                <div className="flex items-center gap-3">
-                  <Link href="/login" className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors font-medium">
-                  {t('header.signIn')}
-                </Link>
-                  <Link href="/register" className="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-violet-600 hover:from-blue-600 hover:to-violet-700 text-white rounded-lg transition-all font-medium shadow-lg shadow-blue-500/50 hover:shadow-xl hover:shadow-blue-500/50">
+                <div className="flex items-center gap-2 ml-2">
+                  <Link 
+                    href="/login" 
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  >
+                    {t('header.signIn')}
+                  </Link>
+                  <Link 
+                    href="/register" 
+                    className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-violet-600 hover:from-blue-600 hover:to-violet-700 text-white rounded-lg transition-all font-semibold text-sm shadow-md shadow-blue-500/30 hover:shadow-lg hover:shadow-blue-500/50 hover:scale-105 duration-200"
+                  >
                     {t('landing.startFreeTrial')}
                   </Link>
                 </div>
@@ -144,10 +160,10 @@ export default function Home() {
             </nav>
 
             {/* Mobile Menu Button */}
-            <div className="flex items-center gap-3 lg:hidden">
+            <div className="flex items-center gap-2 lg:hidden flex-shrink-0">
               <button
                 onClick={toggleTheme}
-                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
+                className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-all duration-200"
                 aria-label="Toggle theme"
               >
                 {theme === 'light' ? (
@@ -162,16 +178,16 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all"
+                className="p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900/50 transition-all duration-200"
                 aria-label="Toggle menu"
               >
                 {mobileMenuOpen ? (
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 ) : (
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
                   </svg>
                 )}
               </button>
@@ -209,15 +225,15 @@ export default function Home() {
             >
               <div className="flex flex-col h-full">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-white/5">
-                  <Link href="/" className="flex items-center gap-2.5" onClick={() => setMobileMenuOpen(false)}>
-                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-violet-600 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100 dark:border-white/5">
+                  <Link href="/" className="flex items-center gap-2 sm:gap-2.5" onClick={() => setMobileMenuOpen(false)}>
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-blue-500 to-violet-600 rounded-lg flex items-center justify-center">
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                       </svg>
                     </div>
-                    <span className="text-base font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                      {t('landing.logo')}
+                    <span className="text-sm sm:text-base font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+                      My Comments
                     </span>
                   </Link>
                   <button
@@ -230,6 +246,50 @@ export default function Home() {
                     </svg>
                   </button>
                 </div>
+
+                {/* Profile Section for logged in users - Moved to top */}
+                {session && (
+                  <div className="px-4 py-4 border-b border-gray-100 dark:border-white/5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-violet-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                        {session.user?.name?.charAt(0).toUpperCase() || 'U'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                          {session.user?.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {session.user?.email}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg transition-all text-sm font-medium"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        <span>Dashboard</span>
+                      </Link>
+                      <button
+                        onClick={async () => {
+                          await signOut({ redirect: false });
+                          setMobileMenuOpen(false);
+                          router.push('/');
+                        }}
+                        className="flex items-center gap-3 px-4 py-2.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all text-sm font-medium w-full"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        <span>Logout</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Navigation */}
                 <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
@@ -299,13 +359,6 @@ export default function Home() {
                     >
                       {t('landing.startFreeTrial')}
                     </Link>
-                  </div>
-                )}
-
-                {/* Profile Dropdown for logged in users */}
-                {session && (
-                  <div className="px-4 pb-6">
-                    <ProfileDropdown />
                   </div>
                 )}
               </div>
@@ -587,9 +640,9 @@ export default function Home() {
               {/* Pro Plan - Most Popular */}
               <div className="relative group">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-violet-600 rounded-2xl blur opacity-50"></div>
-                <div className="relative bg-gradient-to-br from-blue-500/20 to-violet-600/20 backdrop-blur-xl border-2 border-blue-500/50 rounded-2xl p-8 hover:scale-[1.02] transition-all">
-                  <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2">
-                    <span className="px-4 py-1 bg-gradient-to-r from-blue-500 to-violet-600 text-white text-sm font-bold rounded-full">
+                <div className="relative bg-gradient-to-br from-blue-500/20 to-violet-600/20 backdrop-blur-xl border-2 border-blue-500/50 rounded-2xl p-8 hover:scale-[1.02] transition-all overflow-visible">
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                    <span className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-gradient-to-r from-blue-500 to-violet-600 text-white text-[10px] sm:text-xs font-bold rounded-full whitespace-nowrap shadow-lg">
                       {t('landing.pricing.mostPopular')}
                     </span>
                   </div>

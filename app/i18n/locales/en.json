@@ -468,14 +468,19 @@
       "newComments": "new comments",
       "showPost": "Show Post",
       "hidePost": "Hide Post",
+      "viewPost": "View Post",
       "originalPost": "Original Post",
+      "close": "Close",
+      "commentBy": "Comment by",
       "fetchedSuccessfully": "{{count}} {{count, plural, one {comment} other {comments}}} fetched successfully!",
       "lastFetched": "Last fetched",
       "never": "Never",
       "failedToFetch": "Failed to fetch comments",
       "errorLoading": "Error loading comments",
       "failedToRefresh": "Failed to refresh comments",
-      "errorRefreshing": "Error refreshing comments"
+      "errorRefreshing": "Error refreshing comments",
+      "facebookPermissionError": "Facebook currently restricts access to comments for this Page. Please contact support if you need this enabled.",
+      "facebookPermissionBlock": "Facebook currently restricts access to comments for this Page in this testing mode."
     }
   }
 }

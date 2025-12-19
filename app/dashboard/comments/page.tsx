@@ -16,6 +16,8 @@ interface Comment {
   status: string;
   postId: string;
   postMessage?: string;
+  postImage?: string;
+  postCreatedAt?: string;
   pageName?: string;
   provider?: string;
 }
@@ -40,8 +42,10 @@ function CommentsPageContent() {
   const [showNewCommentsNotification, setShowNewCommentsNotification] = useState(false);
   const [currentPageName, setCurrentPageName] = useState<string | null>(null);
   const [currentPageProvider, setCurrentPageProvider] = useState<string | null>(null);
-  const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({});
+  const [selectedPostForModal, setSelectedPostForModal] = useState<string | null>(null);
   const [refreshingTokens, setRefreshingTokens] = useState(false);
+  const [availablePages, setAvailablePages] = useState<Array<{ id: string; name: string; provider: string }>>([]);
+  const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
   const pageId = searchParams.get('pageId');
   const hasInitialFetch = useRef(false);
   const lastFetchedPageId = useRef<string | null>(null);
@@ -66,6 +70,62 @@ function CommentsPageContent() {
       router.push('/login');
     }
   }, [status, router]);
+
+  // Fetch available pages for dropdown
+  useEffect(() => {
+    if (session) {
+      const fetchPages = async () => {
+        try {
+          const response = await fetch('/api/facebook/pages');
+          if (response.ok) {
+            const data = await response.json();
+            const allPages: Array<{ id: string; name: string; provider: string }> = [];
+            
+            // Add Facebook pages
+            if (data.pages) {
+              data.pages.forEach((page: any) => {
+                allPages.push({
+                  id: page.id,
+                  name: page.name,
+                  provider: 'facebook'
+                });
+              });
+            }
+            
+            // Add Instagram pages
+            if (data.instagramPages) {
+              data.instagramPages.forEach((page: any) => {
+                allPages.push({
+                  id: page.id,
+                  name: page.name || page.username,
+                  provider: 'instagram'
+                });
+              });
+            }
+            
+            // Also add connected pages if available
+            if (data.connectedPages) {
+              data.connectedPages.forEach((page: any) => {
+                if (!allPages.find(p => p.id === page.pageId)) {
+                  allPages.push({
+                    id: page.pageId,
+                    name: page.pageName,
+                    provider: page.provider
+                  });
+                }
+              });
+            }
+            
+            setAvailablePages(allPages);
+          }
+        } catch (error) {
+          console.error('Error fetching pages:', error);
+        }
+      };
+      
+      fetchPages();
+    }
+  }, [session]);
 
   useEffect(() => {
     if (session && pageId) {
@@ -94,13 +154,27 @@ function CommentsPageContent() {
         setLastFetchedAt(data.lastFetchedAt || null);
         setNewCommentsCount(data.newCommentsCount || 0);
         
-        // Set current page info from first comment if available
+        // Set current page info from first comment if available, or from availablePages if no comments
         if (data.comments && data.comments.length > 0) {
           setCurrentPageName(data.comments[0].pageName || null);
           setCurrentPageProvider(data.comments[0].provider || null);
+        } else {
+          // If no comments, try to get page info from availablePages
+          const selectedPage = availablePages.find(p => p.id === pageId);
+          if (selectedPage) {
+            setCurrentPageName(selectedPage.name);
+            setCurrentPageProvider(selectedPage.provider);
+          }
         }
         
-        if (data.error) {
+        // Handle Facebook permission error code 10 specifically
+        if (data.error === 'FACEBOOK_PERMISSION_BLOCK') {
+          setWarning(t('dashboard.comments.facebookPermissionBlock'));
+          setError(null);
+        } else if (data.error === 'FACEBOOK_PERMISSION_ERROR') {
+          setWarning(t('dashboard.comments.facebookPermissionError'));
+          setError(null);
+        } else if (data.error) {
           setError(data.error);
         }
         if (data.warning) {
@@ -137,10 +211,17 @@ function CommentsPageContent() {
         const newCount = data.newCommentsCount || 0;
         setNewCommentsCount(newCount);
         
-        // Set current page info from first comment if available
+        // Set current page info from first comment if available, or from availablePages if no comments
         if (data.comments && data.comments.length > 0) {
           setCurrentPageName(data.comments[0].pageName || null);
           setCurrentPageProvider(data.comments[0].provider || null);
+        } else {
+          // If no comments, try to get page info from availablePages
+          const selectedPage = availablePages.find(p => p.id === pageId);
+          if (selectedPage) {
+            setCurrentPageName(selectedPage.name);
+            setCurrentPageProvider(selectedPage.provider);
+          }
         }
         
         if (newCount > 0) {
@@ -153,7 +234,14 @@ function CommentsPageContent() {
           // Show success message
           setError(null);
         }
-        if (data.error) {
+        // Handle Facebook permission error code 10 specifically
+        if (data.error === 'FACEBOOK_PERMISSION_BLOCK') {
+          setWarning(t('dashboard.comments.facebookPermissionBlock'));
+          setError(null);
+        } else if (data.error === 'FACEBOOK_PERMISSION_ERROR') {
+          setWarning(t('dashboard.comments.facebookPermissionError'));
+          setError(null);
+        } else if (data.error) {
           setError(data.error);
         }
         if (data.warning) {
@@ -461,74 +549,133 @@ function CommentsPageContent() {
       )}
 
       <div className="lg:ml-64">
-        <header className="sticky top-0 z-20 h-20 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-900">
-          <div className="h-full px-6 flex items-center justify-between">
-            <div className="flex items-center gap-4">
+        <header className="sticky top-0 z-20 h-16 sm:h-20 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-900">
+          <div className="h-full px-3 sm:px-6 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900 rounded-lg transition-all"
+                className="lg:hidden p-1.5 sm:p-2 -ml-1 sm:-ml-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900 rounded-lg transition-all flex-shrink-0"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">
                     {t('dashboard.menu.comments') || 'Comments'}
                   </h1>
-                  {currentPageName && (
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 dark:bg-gray-900 rounded-md">
-                      {currentPageProvider === 'instagram' ? (
-                        <svg className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                  {currentPageName && availablePages.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setPageDropdownOpen(!pageDropdownOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-md transition-colors"
+                      >
+                        {currentPageProvider === 'instagram' ? (
+                          <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-pink-600 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                          </svg>
+                        )}
+                        <span className="hidden sm:inline text-xs font-medium text-gray-700 dark:text-gray-300">
+                          {currentPageName}
+                        </span>
+                        <svg className={`w-3 h-3 text-gray-500 dark:text-gray-400 transition-transform ${pageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
-                      ) : (
-                        <svg className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                        </svg>
+                      </button>
+                      
+                      {/* Dropdown Menu */}
+                      {pageDropdownOpen && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-10" 
+                            onClick={() => setPageDropdownOpen(false)}
+                          ></div>
+                          <div className="fixed sm:absolute top-[65%] sm:top-full left-1/2 sm:left-0 -translate-x-1/2 sm:translate-x-0 sm:translate-y-0 sm:mt-1 mt-0 w-[90vw] sm:w-56 md:w-64 max-w-sm sm:max-w-none bg-white dark:bg-gray-950 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 py-1 z-20 max-h-64 overflow-y-auto custom-scrollbar">
+                            {availablePages.map((page) => {
+                              const isSelected = page.id === pageId;
+                              return (
+                                <button
+                                  key={page.id}
+                                  onClick={() => {
+                                    // Update page name and provider immediately
+                                    setCurrentPageName(page.name);
+                                    setCurrentPageProvider(page.provider);
+                                    setPageDropdownOpen(false);
+                                    router.push(`/dashboard/comments?pageId=${page.id}`);
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors ${
+                                    isSelected ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                                  }`}
+                                >
+                                  {page.provider === 'instagram' ? (
+                                    <svg className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                                    </svg>
+                                  )}
+                                  <span className="flex-1 truncate">{page.name}</span>
+                                  {isSelected && (
+                                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
                       )}
-                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {currentPageName}
-                      </span>
                     </div>
                   )}
                 </div>
                 {comments.length > 0 && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                     {comments.length} {comments.length === 1 ? t('dashboard.comments.newComment') : t('dashboard.comments.newComments')}
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               <ProfileDropdown />
             </div>
           </div>
         </header>
 
-        <main className="min-h-[calc(100vh-80px)] p-4 sm:p-6 lg:p-8">
+        <main className="min-h-[calc(100vh-80px)] p-3 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+            <div className="mb-4 sm:mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-1">
                     {t('dashboard.comments.title') || 'Comments'}
                   </h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                     {t('dashboard.comments.description') || 'Manage and respond to comments from your connected pages'}
                     {lastFetchedAt && (
-                      <span className="ml-2">
+                      <span className="hidden sm:inline ml-2">
                         • {t('dashboard.comments.lastFetched')} {formatTimeAgo(lastFetchedAt)}
                       </span>
                     )}
                   </p>
+                  {lastFetchedAt && (
+                    <p className="sm:hidden text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {t('dashboard.comments.lastFetched')} {formatTimeAgo(lastFetchedAt)}
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={refreshComments}
                   disabled={fetching}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md font-medium text-sm"
+                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md font-medium text-xs sm:text-sm w-full sm:w-auto"
                 >
                   {fetching ? (
                     <>
@@ -553,22 +700,22 @@ function CommentsPageContent() {
               
               {/* Stats Bar */}
               {comments.length > 0 && (
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm">
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-gray-600 dark:text-gray-400">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                     <span className="font-medium">{comments.length}</span>
-                    <span>{t('dashboard.comments.totalComments')}</span>
+                    <span className="hidden sm:inline">{t('dashboard.comments.totalComments')}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                    <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-amber-600 dark:text-amber-400">
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-amber-500 rounded-full"></div>
                     <span>
                       {comments.filter(c => c.status === 'pending').length} {t('dashboard.comments.pending')}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-green-600 dark:text-green-400">
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
                     <span>
                       {comments.filter(c => c.status === 'replied').length} {t('dashboard.comments.replied')}
                     </span>
@@ -578,18 +725,18 @@ function CommentsPageContent() {
             </div>
 
             {showNewCommentsNotification && newCommentsCount > 0 && (
-              <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <p className="text-green-800 dark:text-green-200 text-sm font-medium">
+                  <p className="text-green-800 dark:text-green-200 text-xs sm:text-sm font-medium truncate">
                     {t('dashboard.comments.fetchedSuccessfully', { count: newCommentsCount })}
                   </p>
                 </div>
                 <button
                   onClick={() => setShowNewCommentsNotification(false)}
-                  className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
+                  className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 flex-shrink-0 p-1"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -599,16 +746,16 @@ function CommentsPageContent() {
             )}
 
             {warning && (
-              <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  <p className="text-yellow-800 dark:text-yellow-200 text-sm">{warning}</p>
+                  <p className="text-yellow-800 dark:text-yellow-200 text-xs sm:text-sm truncate">{warning}</p>
                 </div>
                 <button
                   onClick={() => setWarning(null)}
-                  className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200"
+                  className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200 flex-shrink-0 p-1"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -618,10 +765,28 @@ function CommentsPageContent() {
             )}
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <div className="flex items-start justify-between gap-4">
-                  <p className="text-red-800 dark:text-red-200 text-sm flex-1">{error}</p>
-                  {error.includes('pages_read_engagement') && (
+              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex items-start justify-between gap-2 sm:gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-red-800 dark:text-red-200 text-xs sm:text-sm mb-2 break-words">{error}</p>
+                    {error.includes('App Review') && (
+                      <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <p className="text-yellow-800 dark:text-yellow-200 text-xs font-medium mb-2">How to fix this:</p>
+                        <ol className="text-yellow-700 dark:text-yellow-300 text-xs space-y-1 list-decimal list-inside">
+                          <li>Go to <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" className="underline">Facebook Developer Console</a></li>
+                          <li>Select your app → App Review → Permissions and Features</li>
+                          <li>Find 'pages_read_engagement' and click "Request" or "Edit"</li>
+                          <li>Submit your app for review with a clear use case (e.g., "Manage and respond to comments on Facebook Pages")</li>
+                          <li>Wait for Facebook's approval (usually 1-7 business days)</li>
+                          <li>After approval, users will need to reconnect their Facebook account</li>
+                        </ol>
+                        <p className="text-yellow-700 dark:text-yellow-300 text-xs mt-2">
+                          <strong>Note:</strong> In development mode, only the app owner and test users can access permissions that require review.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {error.includes('pages_read_engagement') && !error.includes('App Review') && (
                     <button
                       onClick={async () => {
                         setRefreshingTokens(true);
@@ -680,73 +845,72 @@ function CommentsPageContent() {
                 </div>
               </div>
             ) : comments.length === 0 ? (
-              <div className="bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800 p-12 text-center">
-                <div className="w-16 h-16 bg-gray-100 dark:bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-white dark:bg-gray-950 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-800 p-8 sm:p-12 text-center">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 dark:bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <svg className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('dashboard.comments.noCommentsYet')}</h3>
-                <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('dashboard.comments.noCommentsYet')}</h3>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-4 sm:mb-6 max-w-sm mx-auto px-2">
                   {t('dashboard.comments.noCommentsDescription')}
                 </p>
                 <button
                   onClick={refreshComments}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   {t('dashboard.comments.refreshComments')}
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {comments.map((comment) => {
-                  const isPostExpanded = expandedPosts[comment.id] || false;
-                  
                   return (
                     <div
                       key={comment.id}
-                      className="group bg-white dark:bg-gray-950 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition-all duration-200 overflow-hidden"
+                      className="group bg-white dark:bg-gray-950 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition-all duration-200 overflow-hidden"
                     >
-                      <div className="p-5">
-                        <div className="flex items-start gap-4">
+                      <div className="p-3 sm:p-5">
+                        <div className="flex items-start gap-2 sm:gap-4">
                           {/* Avatar */}
                           <div className="flex-shrink-0">
-                            <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-violet-600 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-sm">
+                            <div className="w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-blue-500 to-violet-600 rounded-full flex items-center justify-center text-white font-semibold text-xs sm:text-sm shadow-sm">
                               {comment.authorName.charAt(0).toUpperCase()}
                             </div>
                           </div>
 
                           {/* Content */}
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-3 mb-2">
+                            {/* Header: Author, Date, Status, Actions */}
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-2">
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <h3 className="font-semibold text-gray-900 dark:text-white text-base">
+                                <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
+                                  <h3 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">
                                     {comment.authorName}
                                   </h3>
-                                  <span className="text-gray-400 dark:text-gray-600">•</span>
-                                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                                  <span className="text-gray-400 dark:text-gray-600 hidden sm:inline">•</span>
+                                  <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
                                     {formatCommentDate(comment.createdAt)}
                                   </span>
                                 </div>
                                 
                                 {/* Page Info */}
                                 {comment.pageName && (
-                                  <div className="flex items-center gap-2 mt-1.5">
-                                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 dark:bg-gray-900 rounded-md">
+                                  <div className="flex items-center gap-1.5 sm:gap-2 mt-1">
+                                    <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 bg-gray-100 dark:bg-gray-900 rounded-md">
                                       {comment.provider === 'instagram' ? (
-                                        <svg className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-pink-600 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
                                           <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                                         </svg>
                                       ) : (
-                                        <svg className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
                                           <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                                         </svg>
                                       )}
-                                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                      <span className="text-[10px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 truncate max-w-[120px] sm:max-w-none">
                                         {comment.pageName}
                                       </span>
                                     </div>
@@ -754,73 +918,64 @@ function CommentsPageContent() {
                                 )}
                               </div>
                               
-                              {/* Status Badge */}
-                              <span
-                                className={`flex-shrink-0 px-2.5 py-1 rounded-md text-xs font-medium ${
-                                  comment.status === 'replied'
-                                    ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
-                                    : comment.status === 'ignored'
-                                    ? 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-800'
-                                    : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
-                                }`}
-                              >
-                                {t(`dashboard.comments.${comment.status}`)}
-                              </span>
-                            </div>
-
-                            {/* Post Preview Button */}
-                            {comment.postMessage && (
-                              <div className="mb-3">
-                                <button
-                                  onClick={() => setExpandedPosts(prev => ({ ...prev, [comment.id]: !prev[comment.id] }))}
-                                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-200"
+                              {/* Action Buttons and Status Badge - Stack on mobile */}
+                              <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-2 flex-shrink-0">
+                                {/* Status Badge - Show first on mobile */}
+                                <span
+                                  className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[10px] sm:text-xs font-medium ${
+                                    comment.status === 'replied'
+                                      ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
+                                      : comment.status === 'ignored'
+                                      ? 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-800'
+                                      : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                                  }`}
                                 >
-                                  <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isPostExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                                  </svg>
-                                  <span>{isPostExpanded ? t('dashboard.comments.hidePost') : t('dashboard.comments.showPost')}</span>
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Post Preview Content */}
-                            {isPostExpanded && comment.postMessage && (
-                              <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                                  </svg>
-                                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{t('dashboard.comments.originalPost')}</span>
+                                  {t(`dashboard.comments.${comment.status}`)}
+                                </span>
+                                
+                                {/* Action Buttons */}
+                                <div className="flex items-center gap-0.5 sm:gap-1">
+                                  {/* Reply with AI */}
+                                  <button 
+                                    className="p-1 sm:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-md transition-colors active:scale-95"
+                                    title={t('dashboard.comments.replyWithAI')}
+                                  >
+                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                  </button>
+                                  
+                                  {/* View Post */}
+                                  {comment.postMessage && (
+                                    <button
+                                      onClick={() => setSelectedPostForModal(comment.id)}
+                                      className="p-1 sm:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-md transition-colors active:scale-95"
+                                      title={t('dashboard.comments.viewPost')}
+                                    >
+                                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                  
+                                  {/* Ignore */}
+                                  <button 
+                                    className="p-1 sm:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-md transition-colors active:scale-95"
+                                    title={t('dashboard.comments.ignore')}
+                                  >
+                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
                                 </div>
-                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
-                                  {comment.postMessage}
-                                </p>
                               </div>
-                            )}
+                            </div>
 
                             {/* Comment Message */}
-                            <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4 whitespace-pre-wrap break-words">
+                            <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 leading-relaxed mb-0 sm:mb-4 whitespace-pre-wrap break-words">
                               {comment.message}
                             </p>
-
-                            {/* Actions */}
-                            <div className="flex items-center gap-2">
-                              <button className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                {t('dashboard.comments.replyWithAI')}
-                              </button>
-                              <button className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-all duration-200">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                                {t('dashboard.comments.ignore')}
-                              </button>
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -832,6 +987,111 @@ function CommentsPageContent() {
           </div>
         </main>
       </div>
+
+      {/* Post Modal */}
+      {(() => {
+        const modalComment = selectedPostForModal ? comments.find(c => c.id === selectedPostForModal) : null;
+        
+        if (!modalComment || !modalComment.postMessage) return null;
+        
+        return (
+          <div 
+            className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/50 dark:bg-black/70 backdrop-blur-sm"
+            onClick={() => setSelectedPostForModal(null)}
+          >
+            <div 
+              className="bg-white dark:bg-gray-950 rounded-lg sm:rounded-xl shadow-2xl border border-gray-200 dark:border-gray-800 max-w-2xl w-full max-h-[90vh] sm:max-h-[85vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-800">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500 to-violet-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    {modalComment.provider === 'instagram' ? (
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-sm sm:text-base text-gray-900 dark:text-white truncate">{modalComment.pageName}</h3>
+                    <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">{t('dashboard.comments.originalPost')}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedPostForModal(null)}
+                  className="p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-lg transition-colors flex-shrink-0 ml-2"
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 custom-scrollbar">
+                {/* Post Image */}
+                {modalComment.postImage && (
+                  <div className="mb-3 sm:mb-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-900 flex items-center justify-center max-h-[200px] sm:max-h-[250px] md:max-h-[300px]">
+                    <img 
+                      src={modalComment.postImage} 
+                      alt={t('dashboard.comments.originalPost')}
+                      className="w-full h-full object-contain max-h-[200px] sm:max-h-[250px] md:max-h-[300px]"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+                
+                {/* Post Date */}
+                {modalComment.postCreatedAt && (
+                  <div className="mb-3 sm:mb-4 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="break-words">
+                      {new Date(modalComment.postCreatedAt).toLocaleDateString(i18n.language || 'en', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                )}
+                
+                {/* Post Message */}
+                {modalComment.postMessage && (
+                  <div className="prose prose-xs sm:prose-sm dark:prose-invert max-w-none">
+                    <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
+                      {modalComment.postMessage}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                  <span>{t('dashboard.comments.commentBy')} {modalComment.authorName}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedPostForModal(null)}
+                  className="w-full sm:w-auto px-4 py-2 bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg text-xs sm:text-sm font-medium transition-colors"
+                >
+                  {t('dashboard.comments.close')}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -164,9 +164,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch user's Facebook pages
-    // Fetch user's Facebook pages
     // Note: We need pages_show_list permission for this to work
-    const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,category&limit=100`;
+    // This endpoint returns Page access tokens (not user tokens) for each page
+    const pagesUrl = `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,category&limit=100`;
     console.log('[API] Fetching pages from Facebook API...');
     console.log('[API] URL:', pagesUrl.replace(accessToken, '[TOKEN]'));
     
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
             // Retry with refreshed token
             accessToken = refreshedToken;
             pagesResponse = await fetch(
-              `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`
+              `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`
             );
           } else {
             // Could not refresh, return error
@@ -445,6 +445,34 @@ export async function POST(request: NextRequest) {
         });
 
         if (account?.access_token) {
+          // FIRST: Check if the user's main token has the permission
+          console.log('[Pages API] Checking user token permissions...');
+          const userTokenDebugUrl = `https://graph.facebook.com/v18.0/debug_token?input_token=${account.access_token}&access_token=${account.access_token}`;
+          const userTokenDebugResponse = await fetch(userTokenDebugUrl);
+          
+          let userTokenHasPermission = false;
+          if (userTokenDebugResponse.ok) {
+            const userTokenDebugData = await userTokenDebugResponse.json();
+            const userScopes = userTokenDebugData.data?.scopes || [];
+            console.log('[Pages API] User token scopes:', userScopes);
+            userTokenHasPermission = userScopes.includes('pages_read_engagement');
+            
+            if (!userTokenHasPermission) {
+              console.error('[Pages API] ❌ CRITICAL: User token is missing pages_read_engagement permission!');
+              console.error('[Pages API] This means page tokens will NOT have this permission either.');
+              console.error('[Pages API] Possible reasons:');
+              console.error('[Pages API] 1. Permission requires Facebook App Review and hasn\'t been approved yet');
+              console.error('[Pages API] 2. User didn\'t grant the permission during OAuth');
+              console.error('[Pages API] 3. App is in development mode and permission requires review');
+              console.error('[Pages API] User MUST reconnect and ensure they grant the permission, OR submit for App Review.');
+            } else {
+              console.log('[Pages API] ✅ User token has pages_read_engagement permission');
+            }
+          } else {
+            const userTokenErrorText = await userTokenDebugResponse.text();
+            console.error('[Pages API] Error debugging user token:', userTokenErrorText);
+          }
+          
           // Verify the page token has the required permissions
           const debugTokenUrl = `https://graph.facebook.com/v18.0/debug_token?input_token=${pageAccessToken}&access_token=${account.access_token}`;
           const debugResponse = await fetch(debugTokenUrl);
@@ -455,39 +483,48 @@ export async function POST(request: NextRequest) {
             console.log('[Pages API] Page token scopes:', scopes);
             
             if (!scopes.includes('pages_read_engagement')) {
-              console.warn('[Pages API] ⚠️ Page token missing pages_read_engagement permission, fetching fresh token...');
+              console.warn('[Pages API] ⚠️ Page token missing pages_read_engagement permission');
               
-              // Fetch fresh page tokens from Facebook
-              const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${account.access_token}&fields=id,name,access_token&limit=100`;
-              const pagesResponse = await fetch(pagesUrl);
-              
-              if (pagesResponse.ok) {
-                const pagesData = await pagesResponse.json();
-                const page = pagesData.data?.find((p: any) => p.id === pageId);
+              // Only try to refresh if user token has permission
+              if (userTokenHasPermission) {
+                console.log('[Pages API] User token has permission, fetching fresh page token...');
                 
-                if (page?.access_token) {
-                  // Verify the fresh token has the permission
-                  const freshDebugUrl = `https://graph.facebook.com/v18.0/debug_token?input_token=${page.access_token}&access_token=${account.access_token}`;
-                  const freshDebugResponse = await fetch(freshDebugUrl);
+                // Fetch fresh page tokens from Facebook
+                const pagesUrl = `https://graph.facebook.com/v24.0/me/accounts?access_token=${account.access_token}&fields=id,name,access_token&limit=100`;
+                const pagesResponse = await fetch(pagesUrl);
+                
+                if (pagesResponse.ok) {
+                  const pagesData = await pagesResponse.json();
+                  const page = pagesData.data?.find((p: any) => p.id === pageId);
                   
-                  if (freshDebugResponse.ok) {
-                    const freshDebugData = await freshDebugResponse.json();
-                    const freshScopes = freshDebugData.data?.scopes || [];
-                    console.log('[Pages API] Fresh page token scopes:', freshScopes);
+                  if (page?.access_token) {
+                    // Verify the fresh token has the permission
+                    const freshDebugUrl = `https://graph.facebook.com/v18.0/debug_token?input_token=${page.access_token}&access_token=${account.access_token}`;
+                    const freshDebugResponse = await fetch(freshDebugUrl);
                     
-                    if (freshScopes.includes('pages_read_engagement')) {
-                      finalPageAccessToken = page.access_token;
-                      console.log('[Pages API] ✅ Using fresh page token with pages_read_engagement permission');
-                    } else {
-                      console.warn('[Pages API] ⚠️ Fresh token also missing permission. User may need to reconnect.');
+                    if (freshDebugResponse.ok) {
+                      const freshDebugData = await freshDebugResponse.json();
+                      const freshScopes = freshDebugData.data?.scopes || [];
+                      console.log('[Pages API] Fresh page token scopes:', freshScopes);
+                      
+                      if (freshScopes.includes('pages_read_engagement')) {
+                        finalPageAccessToken = page.access_token;
+                        console.log('[Pages API] ✅ Using fresh page token with pages_read_engagement permission');
+                      } else {
+                        console.error('[Pages API] ❌ Fresh token also missing permission even though user token has it!');
+                        console.error('[Pages API] This is unusual - page tokens should inherit permissions from user token.');
+                      }
                     }
+                  } else {
+                    console.error('[Pages API] Page not found when fetching fresh tokens');
                   }
                 } else {
-                  console.error('[Pages API] Page not found when fetching fresh tokens');
+                  const errorText = await pagesResponse.text();
+                  console.error('[Pages API] Failed to fetch fresh page tokens:', errorText);
                 }
               } else {
-                const errorText = await pagesResponse.text();
-                console.error('[Pages API] Failed to fetch fresh page tokens:', errorText);
+                console.error('[Pages API] ❌ Cannot refresh page token - user token missing permission');
+                console.error('[Pages API] Page token will also be missing permission. User needs to reconnect.');
               }
             } else {
               console.log('[Pages API] ✅ Page token has pages_read_engagement permission');
