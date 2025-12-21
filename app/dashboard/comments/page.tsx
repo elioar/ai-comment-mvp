@@ -46,6 +46,7 @@ function CommentsPageContent() {
   const [refreshingTokens, setRefreshingTokens] = useState(false);
   const [availablePages, setAvailablePages] = useState<Array<{ id: string; name: string; provider: string }>>([]);
   const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
+  const [processingCommentId, setProcessingCommentId] = useState<string | null>(null);
   const pageId = searchParams.get('pageId');
   const hasInitialFetch = useRef(false);
   const lastFetchedPageId = useRef<string | null>(null);
@@ -259,6 +260,60 @@ function CommentsPageContent() {
       setError(t('dashboard.comments.errorRefreshing'));
     } finally {
       setFetching(false);
+    }
+  };
+
+  const handleHide = async (commentId: string) => {
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment) return;
+    
+    const isCurrentlyHidden = comment.status === 'ignored';
+    setProcessingCommentId(commentId);
+    
+    try {
+      const response = await fetch(`/api/facebook/comments/${commentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: isCurrentlyHidden ? 'unhide' : 'hide' }),
+      });
+      
+      if (response.ok) {
+        // Refresh comments to get updated status
+        await refreshComments();
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to hide comment');
+      }
+    } catch (error: any) {
+      setError(error?.message || 'Failed to hide comment');
+    } finally {
+      setProcessingCommentId(null);
+    }
+  };
+
+  const handleDelete = async (commentId: string) => {
+    if (!confirm(t('dashboard.comments.confirmDelete'))) return;
+    
+    setProcessingCommentId(commentId);
+    
+    try {
+      const response = await fetch(`/api/facebook/comments/${commentId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // Remove from local state immediately for better UX
+        setComments(prev => prev.filter(c => c.id !== commentId));
+        // Also refresh to ensure sync
+        await refreshComments();
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to delete comment');
+      }
+    } catch (error: any) {
+      setError(error?.message || 'Failed to delete comment');
+    } finally {
+      setProcessingCommentId(null);
     }
   };
 
@@ -708,12 +763,6 @@ function CommentsPageContent() {
                     <span className="font-medium">{comments.length}</span>
                     <span className="hidden sm:inline">{t('dashboard.comments.totalComments')}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 sm:gap-2 text-amber-600 dark:text-amber-400">
-                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-amber-500 rounded-full"></div>
-                    <span>
-                      {comments.filter(c => c.status === 'pending').length} {t('dashboard.comments.pending')}
-                    </span>
-                  </div>
                   <div className="flex items-center gap-1.5 sm:gap-2 text-green-600 dark:text-green-400">
                     <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
                     <span>
@@ -866,117 +915,136 @@ function CommentsPageContent() {
                 </button>
               </div>
             ) : (
-              <div className="space-y-2 sm:space-y-3">
+              <div className="space-y-3 sm:space-y-4">
                 {comments.map((comment) => {
                   return (
                     <div
                       key={comment.id}
-                      className="group bg-white dark:bg-gray-950 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition-all duration-200 overflow-hidden"
+                      className="group relative bg-white dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl border border-gray-100 dark:border-gray-800/50 hover:border-gray-200 dark:hover:border-gray-700/50 hover:shadow-lg dark:hover:shadow-xl/10 transition-all duration-300 overflow-hidden"
                     >
-                      <div className="p-3 sm:p-5">
-                        <div className="flex items-start gap-2 sm:gap-4">
-                          {/* Avatar */}
+                      <div className="p-3 sm:p-6 relative">
+                        <div className="flex items-start gap-3 sm:gap-4">
+                          {/* Avatar - More Modern */}
                           <div className="flex-shrink-0">
-                            <div className="w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-blue-500 to-violet-600 rounded-full flex items-center justify-center text-white font-semibold text-xs sm:text-sm shadow-sm">
-                              {comment.authorName.charAt(0).toUpperCase()}
+                            <div className="relative">
+                              <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-white font-bold text-xs sm:text-base shadow-lg ring-2 ring-white/20 dark:ring-gray-800/50">
+                                {comment.authorName.charAt(0).toUpperCase()}
+                              </div>
+                              {comment.status === 'replied' && (
+                                <div className="absolute -bottom-0.5 -right-0.5 sm:-bottom-1 sm:-right-1 w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                              )}
                             </div>
                           </div>
 
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            {/* Header: Author, Date, Status, Actions */}
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
-                                  <h3 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">
-                                    {comment.authorName}
-                                  </h3>
-                                  <span className="text-gray-400 dark:text-gray-600 hidden sm:inline">•</span>
-                                  <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                    {formatCommentDate(comment.createdAt)}
-                                  </span>
-                                </div>
-                                
-                                {/* Page Info */}
+                          {/* Content - Cleaner Layout */}
+                          <div className="flex-1 min-w-0 pr-12 sm:pr-0">
+                            {/* Header Row - Better Mobile Layout */}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2 sm:mb-1.5">
+                              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                                <h3 className="font-bold text-gray-900 dark:text-white text-sm sm:text-lg">
+                                  {comment.authorName}
+                                </h3>
                                 {comment.pageName && (
-                                  <div className="flex items-center gap-1.5 sm:gap-2 mt-1">
-                                    <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 bg-gray-100 dark:bg-gray-900 rounded-md">
+                                  <>
+                                    <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
+                                    <div className="flex items-center gap-1">
                                       {comment.provider === 'instagram' ? (
-                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-pink-600 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-pink-500 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
                                           <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                                         </svg>
                                       ) : (
-                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
                                           <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                                         </svg>
                                       )}
-                                      <span className="text-[10px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 truncate max-w-[120px] sm:max-w-none">
+                                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium truncate max-w-[100px] sm:max-w-none">
                                         {comment.pageName}
                                       </span>
                                     </div>
-                                  </div>
+                                  </>
                                 )}
                               </div>
-                              
-                              {/* Action Buttons and Status Badge - Stack on mobile */}
-                              <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-2 flex-shrink-0">
-                                {/* Status Badge - Show first on mobile */}
-                                <span
-                                  className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[10px] sm:text-xs font-medium ${
-                                    comment.status === 'replied'
-                                      ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
-                                      : comment.status === 'ignored'
-                                      ? 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-800'
-                                      : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
-                                  }`}
-                                >
-                                  {t(`dashboard.comments.${comment.status}`)}
-                                </span>
-                                
-                                {/* Action Buttons */}
-                                <div className="flex items-center gap-0.5 sm:gap-1">
-                                  {/* Reply with AI */}
-                                  <button 
-                                    className="p-1 sm:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-md transition-colors active:scale-95"
-                                    title={t('dashboard.comments.replyWithAI')}
-                                  >
-                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                    </svg>
-                                  </button>
-                                  
-                                  {/* View Post */}
-                                  {comment.postMessage && (
-                                    <button
-                                      onClick={() => setSelectedPostForModal(comment.id)}
-                                      className="p-1 sm:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-md transition-colors active:scale-95"
-                                      title={t('dashboard.comments.viewPost')}
-                                    >
-                                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                      </svg>
-                                    </button>
-                                  )}
-                                  
-                                  {/* Ignore */}
-                                  <button 
-                                    className="p-1 sm:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-md transition-colors active:scale-95"
-                                    title={t('dashboard.comments.ignore')}
-                                  >
-                                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
-                                </div>
+                              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-400 dark:text-gray-500">
+                                <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
+                                <span className="font-medium">{formatCommentDate(comment.createdAt)}</span>
                               </div>
                             </div>
 
-                            {/* Comment Message */}
-                            <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 leading-relaxed mb-0 sm:mb-4 whitespace-pre-wrap break-words">
+                            {/* Comment Message - Better Typography */}
+                            <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words font-normal">
                               {comment.message}
                             </p>
                           </div>
+                        </div>
+                        
+                        {/* Action Buttons & Pending Badge - Desktop: Middle, Mobile: Top Right */}
+                        <div className="absolute right-3 top-3 sm:right-6 sm:top-1/2 sm:-translate-y-1/2 flex items-center gap-1.5 sm:gap-2">
+                          {/* Action Buttons - Always visible */}
+                          <div className="flex items-center gap-0.5 sm:gap-1">
+                            {/* Reply with AI */}
+                            <button 
+                              className="p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg sm:rounded-xl transition-all duration-200 active:scale-95 touch-manipulation"
+                              title={t('dashboard.comments.replyWithAI')}
+                            >
+                              <svg className="w-4 h-4 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                            </button>
+                            
+                            {/* View Post */}
+                            {comment.postMessage && (
+                              <button
+                                onClick={() => setSelectedPostForModal(comment.id)}
+                                className="p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg sm:rounded-xl transition-all duration-200 active:scale-95 touch-manipulation"
+                                title={t('dashboard.comments.viewPost')}
+                              >
+                                <svg className="w-4 h-4 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </button>
+                            )}
+                            
+                            {/* Hide */}
+                            <button 
+                              onClick={() => handleHide(comment.id)}
+                              disabled={processingCommentId === comment.id}
+                              className="p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg sm:rounded-xl transition-all duration-200 active:scale-95 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={comment.status === 'ignored' ? t('dashboard.comments.unhide') : t('dashboard.comments.hide')}
+                            >
+                              {processingCommentId === comment.id ? (
+                                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <svg className="w-4 h-4 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                </svg>
+                              )}
+                            </button>
+                            
+                            {/* Delete */}
+                            <button 
+                              onClick={() => handleDelete(comment.id)}
+                              disabled={processingCommentId === comment.id}
+                              className="p-1.5 sm:p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg sm:rounded-xl transition-all duration-200 active:scale-95 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={t('dashboard.comments.delete')}
+                            >
+                              {processingCommentId === comment.id ? (
+                                <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <svg className="w-4 h-4 sm:w-4 sm:h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+                          
+                          {/* Pending Badge - Last */}
+                          {comment.status === 'pending' && (
+                            <div className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-gradient-to-r from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700 text-white rounded-full text-[9px] sm:text-xs font-semibold shadow-lg backdrop-blur-sm">
+                              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse"></div>
+                              <span className="hidden sm:inline">{t('dashboard.comments.pending')}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

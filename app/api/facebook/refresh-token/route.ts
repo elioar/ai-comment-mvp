@@ -42,12 +42,10 @@ export async function POST(request: NextRequest) {
 
     const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${account.access_token}`;
     
-    console.log('Exchanging Facebook token for long-lived token...');
     const tokenResponse = await fetch(tokenExchangeUrl);
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      console.error('Failed to exchange token:', errorText);
       return NextResponse.json(
         { error: 'Failed to refresh token. Please reconnect your Facebook account.' },
         { status: 400 }
@@ -58,7 +56,6 @@ export async function POST(request: NextRequest) {
     const longLivedToken = tokenData.access_token;
 
     if (!longLivedToken) {
-      console.error('No access token in exchange response:', tokenData);
       return NextResponse.json(
         { error: 'Invalid token response from Facebook' },
         { status: 500 }
@@ -71,14 +68,11 @@ export async function POST(request: NextRequest) {
       data: { access_token: longLivedToken },
     });
 
-    console.log('Successfully refreshed Facebook token to long-lived token');
-
     return NextResponse.json({
       success: true,
       message: 'Token refreshed successfully',
     });
   } catch (error) {
-    console.error('Error refreshing Facebook token:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

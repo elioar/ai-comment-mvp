@@ -47,13 +47,10 @@ export async function GET(request: NextRequest) {
       ? new Date(lastFetchedAt.getTime() - 30000) // 30 seconds before last fetch
       : null;
 
-    console.log('───────────── FB COMMENTS ─────────────');
-    console.log('[info] Fetching comments…');
-    console.log(`[page] ${connectedPage.pageName || 'Unknown'} – id: ${pageId}`);
-    console.log(`[token] page token – length: ${connectedPage.pageAccessToken?.length || 0}`);
-
     // Check if this is Instagram or Facebook
     const isInstagram = connectedPage.provider === 'instagram';
+    
+    console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Fetching comments for ${connectedPage.pageName || pageId}`);
     
     // Helper function to refresh page access token
     const refreshPageAccessToken = async (): Promise<string | null> => {
@@ -67,12 +64,41 @@ export async function GET(request: NextRequest) {
         });
         
         if (!account?.access_token) {
-          console.error('[retry] No user access token found');
+          console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: No user access token found`);
           return null;
         }
         
-        console.log('──────────── FB COMMENTS RETRY ─────────────');
-        console.log('[retry] refreshing page token…');
+        console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Refreshing page token...`);
+        
+        let targetPageId = pageId;
+        let facebookPageId: string | null = null;
+        
+        // For Instagram, we need to find the Facebook Page ID that owns this Instagram account
+        if (isInstagram) {
+          try {
+            // Get the Facebook Page ID from the Instagram Business Account
+            const instagramAccountUrl = `https://graph.facebook.com/v24.0/${pageId}?fields=connected_facebook_page&access_token=${account.access_token}`;
+            const instagramAccountResponse = await fetch(instagramAccountUrl);
+            
+            if (instagramAccountResponse.ok) {
+              const instagramAccountData = await instagramAccountResponse.json();
+              if (instagramAccountData.connected_facebook_page?.id) {
+                facebookPageId = instagramAccountData.connected_facebook_page.id;
+                targetPageId = instagramAccountData.connected_facebook_page.id;
+              }
+            } else {
+              const errorText = await instagramAccountResponse.text();
+              try {
+                const errorData = JSON.parse(errorText);
+                // Rate limit or other error - continue to try /me/accounts
+              } catch (e) {
+                // Continue
+              }
+            }
+          } catch (instagramError) {
+            // Continue - will try to find via /me/accounts
+          }
+        }
         
         // Fetch fresh Page access token from Facebook using /me/accounts endpoint
         // This returns Page access tokens (not user tokens) which are required for reading page posts and comments
@@ -81,35 +107,40 @@ export async function GET(request: NextRequest) {
         
         if (pagesResponse.ok) {
           const pagesData = await pagesResponse.json();
-          const page = pagesData.data?.find((p: any) => p.id === pageId);
+          let page = pagesData.data?.find((p: any) => p.id === targetPageId);
+          
+          // If not found and it's Instagram, try to find by checking which page has this Instagram account
+          if (!page && isInstagram) {
+            for (const fbPage of pagesData.data || []) {
+              try {
+                const instagramCheckUrl = `https://graph.facebook.com/v24.0/${fbPage.id}?fields=instagram_business_account&access_token=${fbPage.access_token}`;
+                const instagramCheckResponse = await fetch(instagramCheckUrl);
+                if (instagramCheckResponse.ok) {
+                  const instagramCheckData = await instagramCheckResponse.json();
+                  if (instagramCheckData.instagram_business_account?.id === pageId) {
+                    page = fbPage;
+                    targetPageId = fbPage.id;
+                    break;
+                  }
+                }
+              } catch (e) {
+                // Continue to next page
+              }
+            }
+          }
           
           if (page?.access_token) {
-            // Verify the new token has the right permissions by checking it
-            try {
-              const debugTokenUrl = `https://graph.facebook.com/v24.0/debug_token?input_token=${page.access_token}&access_token=${account.access_token}`;
-              const debugResponse = await fetch(debugTokenUrl);
-              
-              if (debugResponse.ok) {
-                const debugData = await debugResponse.json();
-                const scopes = debugData.data?.scopes || [];
-                
-                if (!scopes.includes('pages_read_engagement')) {
-                  console.warn('[retry] token missing pages_read_engagement');
-                }
-              }
-            } catch (debugError) {
-              // Silent fail
-            }
-            
+            // Skip debug_token call if we're hitting rate limits (it's optional)
             // Update the stored page access token
             await prisma.connectedPage.update({
               where: { id: connectedPage.id },
               data: { pageAccessToken: page.access_token },
             });
             
-            console.log('[retry] token refreshed');
-            console.log('────────────────────────────────────────────');
+            console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Token refreshed successfully`);
             return page.access_token;
+          } else {
+            console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Page not found when refreshing token`);
           }
         } else {
           const errorText = await pagesResponse.text();
@@ -117,18 +148,20 @@ export async function GET(request: NextRequest) {
             const errorData = JSON.parse(errorText);
             if (errorData.error) {
               const errorCode = errorData.error.code;
-              const errorType = errorData.error.type || '';
-              console.error(`[retry] request failed code ${errorCode}`);
-              if (errorType) {
-                console.error(`[msg] ${errorData.error.message || ''}`);
+              const errorMessage = errorData.error.message || '';
+              
+              if (errorCode === 4) {
+                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Rate Limit: Cannot refresh token (code 4). Please wait and try again.`);
+              } else {
+                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token refresh failed - ${errorMessage}`);
               }
             }
           } catch (parseError) {
-            // Not JSON
+            console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Failed to refresh token`);
           }
         }
       } catch (error) {
-        console.error('[retry] error refreshing token');
+        console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception during token refresh`);
       }
       return null;
     };
@@ -138,16 +171,11 @@ export async function GET(request: NextRequest) {
     
     // Ensure we have a Page access token - if missing, try to fetch it
     if (!currentPageAccessToken) {
-      console.warn('[info] Page token missing, fetching…');
       const refreshedToken = await refreshPageAccessToken();
       if (refreshedToken) {
         currentPageAccessToken = refreshedToken;
-        console.log('[info] Page token retrieved');
       } else {
-        console.error('──────────── FB COMMENTS ERROR ────────────');
-        console.error('[error] Missing page token');
-        console.error('[msg] Page access token is missing or expired');
-        console.error('────────────────────────────────────────────');
+        console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Page token missing or expired`);
         return NextResponse.json({
           error: 'Page access token is missing or expired. Please reconnect your Facebook account to refresh the token.',
           suggestion: 'reconnect_account',
@@ -229,6 +257,7 @@ export async function GET(request: NextRequest) {
     let postsFetchSuccess = false;
     let postsError: string | null = null;
     let hasErrorCode10 = false; // Track if we encountered Facebook error code 10
+    let tokenRefreshedOnce = false; // Track if we already refreshed token once (to avoid multiple refreshes)
     
     try {
       let postsUrl: string;
@@ -242,14 +271,13 @@ export async function GET(request: NextRequest) {
         postsUrl = `https://graph.facebook.com/v24.0/${pageId}/posts?access_token=${currentPageAccessToken}&fields=id,message,created_time,full_picture,attachments&limit=50`;
       }
       
-      console.log(`[api] GET /${isInstagram ? 'media' : 'posts'}`);
       const postsResponse = await fetch(postsUrl);
 
       if (postsResponse.ok) {
         const postsData = await postsResponse.json();
         posts = postsData.data || [];
         postsFetchSuccess = true;
-        console.log(`[result] ${posts.length} ${isInstagram ? 'media' : 'posts'} found`);
+        console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Found ${posts.length} ${isInstagram ? 'media' : 'posts'}`);
       } else {
         const errorText = await postsResponse.text();
         postsError = errorText;
@@ -258,17 +286,50 @@ export async function GET(request: NextRequest) {
           const errorData = JSON.parse(errorText);
           if (errorData.error) {
             const errorCode = errorData.error.code;
+            const errorType = errorData.error.type || 'Unknown';
+            const errorMessage = errorData.error.message || '';
+            
             if (errorCode === 10 && !isInstagram) {
               hasErrorCode10 = true;
-              console.warn('FB COMMENTS: permission blocked by Meta (code 10 – requires pages_read_engagement or Page Public Content Access).');
+              console.error(`Facebook Error: Permission blocked (code 10) - requires pages_read_engagement`);
+            } else if (errorCode === 190 || errorCode === 200 || errorType === 'OAuthException') {
+              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token expired (code ${errorCode}) - ${errorMessage}`);
+              
+              // For Instagram, try to refresh token if it's a token error
+              if (isInstagram) {
+                console.log(`Instagram: Attempting token refresh...`);
+                try {
+                  const refreshedToken = await refreshPageAccessToken();
+                  if (refreshedToken) {
+                    currentPageAccessToken = refreshedToken;
+                    tokenRefreshedOnce = true; // Mark as refreshed so we don't do it again for comments
+                    // Retry the media fetch with the new token
+                    const retryPostsUrl = `https://graph.facebook.com/v24.0/${pageId}/media?access_token=${currentPageAccessToken}&fields=id,caption,timestamp,media_url,thumbnail_url&limit=50`;
+                    const retryPostsResponse = await fetch(retryPostsUrl);
+                    
+                    if (retryPostsResponse.ok) {
+                      const retryPostsData = await retryPostsResponse.json();
+                      posts = retryPostsData.data || [];
+                      postsFetchSuccess = true;
+                      console.log(`Instagram: Successfully fetched ${posts.length} media after token refresh`);
+                    } else {
+                      console.error(`Instagram Error: Still failing after token refresh`);
+                    }
+                  } else {
+                    console.error(`Instagram Error: Token refresh failed`);
+                  }
+                } catch (refreshError) {
+                  console.error(`Instagram Error: Exception during token refresh`);
+                }
+              }
+            } else if (errorCode === 4) {
+              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Rate Limit: ${errorMessage}`);
+            } else {
+              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: ${errorMessage}`);
             }
-            console.error('──────────── FB COMMENTS ERROR ────────────');
-            console.error(`[error] ${errorData.error.type || 'Unknown'} code ${errorData.error.code || 'N/A'}`);
-            console.error(`[msg] ${errorData.error.message || ''}`);
-            console.error('────────────────────────────────────────────');
           }
         } catch (e) {
-          console.error('[error] Failed to fetch posts');
+          console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Failed to fetch ${isInstagram ? 'media' : 'posts'}`);
         }
         
         // For Facebook, try /feed endpoint as fallback
@@ -281,7 +342,6 @@ export async function GET(request: NextRequest) {
               const feedData = await feedResponse.json();
               posts = feedData.data || [];
               postsFetchSuccess = true;
-              console.log(`[result] ${posts.length} posts from /feed`);
             }
           } catch (feedError) {
             // Silent fail
@@ -303,11 +363,13 @@ export async function GET(request: NextRequest) {
           
           // Use existing post IDs to fetch new comments
           posts = existingComments.map(c => ({ id: c.postId }));
-          console.log(`[info] Using ${posts.length} existing post IDs`);
+          if (posts.length > 0) {
+            console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Using ${posts.length} existing post IDs`);
+          }
         }
       }
     } catch (error) {
-      console.error('[error] Error fetching posts');
+      console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception fetching ${isInstagram ? 'media' : 'posts'}`);
       postsError = String(error);
       // Try to get post IDs from existing comments
       const existingComments = await prisma.comment.findMany({
@@ -321,7 +383,6 @@ export async function GET(request: NextRequest) {
         take: 10,
       });
       posts = existingComments.map(c => ({ id: c.postId }));
-      console.log(`[info] Using ${posts.length} existing post IDs`);
     }
 
     // Fetch comments for each post
@@ -332,7 +393,9 @@ export async function GET(request: NextRequest) {
     let skippedCommentsCount = 0;
     let commentsErrors: string[] = [];
     
-    console.log(`[info] Processing ${posts.length} ${isInstagram ? 'media' : 'posts'}`);
+    if (posts.length > 0) {
+      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Processing ${posts.length} ${isInstagram ? 'media' : 'posts'} for comments`);
+    }
     
     for (const post of posts) {
       try {
@@ -353,8 +416,6 @@ export async function GET(request: NextRequest) {
           commentsUrl += `&since=${sinceTimestamp}`;
         }
         
-        console.log(`[post] ${post.id}`);
-        console.log(`[api] GET /comments`);
         const commentsResponse = await fetch(commentsUrl);
 
         if (commentsResponse.ok) {
@@ -362,8 +423,6 @@ export async function GET(request: NextRequest) {
           const commentsData = await commentsResponse.json();
           const comments = commentsData.data || [];
           totalCommentsFetched += comments.length;
-
-          console.log(`[result] ${comments.length} comments returned`);
 
           for (const comment of comments) {
             // Instagram and Facebook have different field names
@@ -458,38 +517,49 @@ export async function GET(request: NextRequest) {
               // Handle error code 10 specifically - do NOT retry
               if (errorCode === 10 && !isInstagram) {
                 hasErrorCode10 = true;
-                console.warn('FB COMMENTS: permission blocked by Meta (code 10 – requires pages_read_engagement or Page Public Content Access).');
+                console.error(`Facebook Error: Permission blocked (code 10) for post ${post.id}`);
                 // Do not retry for code 10, just track it
                 continue; // Skip to next post
               }
               
-              console.error('──────────── FB COMMENTS ERROR ────────────');
-              console.error(`[error] ${errorType} code ${errorCode}`);
-              console.error(`[msg] ${errorMessageText}`);
-              console.error('────────────────────────────────────────────');
-              
               // Check if this is a token expiration or permission error that we should retry
               if (errorCode === 200 || errorType === 'OAuthException' || errorCode === 190) {
-                // Try to refresh the token - but only if user token has permission
-                if (!isInstagram && userTokenHasPermission) {
+                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token expired (code ${errorCode}) for post ${post.id}`);
+                
+                // Try to refresh the token - BUT ONLY ONCE for all posts
+                // For Facebook: only if user token has permission
+                // For Instagram: always try (uses Facebook Page token which can be refreshed)
+                const shouldTryRefresh = (isInstagram || userTokenHasPermission) && !tokenRefreshedOnce;
+                
+                if (shouldTryRefresh) {
                   try {
+                    console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Refreshing token (one time for all posts)...`);
                     const refreshedToken = await refreshPageAccessToken();
                     if (refreshedToken) {
                       currentPageAccessToken = refreshedToken;
+                      tokenRefreshedOnce = true; // Mark as refreshed so we don't do it again
                       shouldRetry = true;
+                      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Token refreshed, retrying comment fetch...`);
                     } else {
-                      // Add error only if refresh failed
+                      console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token refresh failed`);
                       commentsErrors.push(errorMessage);
                     }
                   } catch (refreshError) {
+                    console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception during token refresh`);
                     commentsErrors.push(errorMessage);
                   }
+                } else if (tokenRefreshedOnce) {
+                  // Token already refreshed once, just retry with the refreshed token
+                  shouldRetry = true;
                 } else {
-                  // Add error - user needs to reconnect
+                  console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Cannot refresh token - user needs to reconnect`);
                   commentsErrors.push(errorMessage);
                 }
+              } else if (errorCode === 4) {
+                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Rate Limit: ${errorMessageText}`);
+                commentsErrors.push(errorMessage);
               } else {
-                // Not a permission error, add to errors
+                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: ${errorMessageText}`);
                 commentsErrors.push(errorMessage);
               }
             } else {
@@ -504,9 +574,11 @@ export async function GET(request: NextRequest) {
           // If we should retry, do it now
           if (shouldRetry) {
             try {
-              console.log('──────────── FB COMMENTS RETRY ─────────────');
-              // Retry the comment fetch with new token
-              const retryCommentsUrl = `https://graph.facebook.com/v24.0/${post.id}/comments?access_token=${currentPageAccessToken}&fields=id,message,from,created_time&limit=50${fetchSince ? `&since=${Math.floor(fetchSince.getTime() / 1000)}` : ''}`;
+              // Retry the comment fetch with new token - use correct fields for Instagram vs Facebook
+              const retryFields = isInstagram 
+                ? 'id,text,username,timestamp'
+                : 'id,message,from,created_time';
+              const retryCommentsUrl = `https://graph.facebook.com/v24.0/${post.id}/comments?access_token=${currentPageAccessToken}&fields=${retryFields}&limit=50${fetchSince ? `&since=${Math.floor(fetchSince.getTime() / 1000)}` : ''}`;
               const retryResponse = await fetch(retryCommentsUrl);
               
               if (retryResponse.ok) {
@@ -514,15 +586,27 @@ export async function GET(request: NextRequest) {
                 const retryCommentsData = await retryResponse.json();
                 const retryComments = retryCommentsData.data || [];
                 totalCommentsFetched += retryComments.length;
-                console.log(`[retry] success – ${retryComments.length} comments`);
-                console.log('────────────────────────────────────────────');
+                console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Successfully fetched ${retryComments.length} comments after token refresh`);
                 
                 // Process the retried comments
                 for (const comment of retryComments) {
-                  const commentCreatedAt = new Date(comment.created_time);
-                  const commentMessage = comment.message || '';
-                  const authorName = comment.from?.name || 'Unknown';
-                  const authorId = comment.from?.id || '';
+                  // Instagram and Facebook have different field names
+                  let commentCreatedAt: Date;
+                  let commentMessage: string;
+                  let authorName: string;
+                  let authorId: string;
+                  
+                  if (isInstagram) {
+                    commentCreatedAt = new Date(comment.timestamp);
+                    commentMessage = comment.text || '';
+                    authorName = comment.username || 'Unknown';
+                    authorId = comment.id || '';
+                  } else {
+                    commentCreatedAt = new Date(comment.created_time);
+                    commentMessage = comment.message || '';
+                    authorName = comment.from?.name || 'Unknown';
+                    authorId = comment.from?.id || '';
+                  }
                   
                   const shouldProcess = !fetchSince || commentCreatedAt > fetchSince;
                   
@@ -554,13 +638,18 @@ export async function GET(request: NextRequest) {
                     let postImage: string | undefined;
                     let postCreatedAt: string | undefined;
                     
-                    postImage = post.full_picture || post.attachments?.data?.[0]?.media?.image?.src;
-                    postCreatedAt = post.created_time;
+                    if (isInstagram) {
+                      postImage = post.media_url || post.thumbnail_url;
+                      postCreatedAt = post.timestamp;
+                    } else {
+                      postImage = post.full_picture || post.attachments?.data?.[0]?.media?.image?.src;
+                      postCreatedAt = post.created_time;
+                    }
                     
                     newComments.push({
                       ...comment,
                       postId: post.id,
-                      postMessage: post.message || '',
+                      postMessage: isInstagram ? (post.caption || '') : (post.message || ''),
                       postImage,
                       postCreatedAt,
                     });
@@ -570,39 +659,37 @@ export async function GET(request: NextRequest) {
                   }
                 }
                 continue; // Skip to next post - success!
-              } else {
-                const retryErrorText = await retryResponse.text();
-                try {
-                  const retryErrorData = JSON.parse(retryErrorText);
-                  if (retryErrorData.error) {
-                    const retryErrorCode = retryErrorData.error.code;
-                    if (retryErrorCode === 10 && !isInstagram) {
-                      hasErrorCode10 = true;
-                      console.warn('FB COMMENTS: permission blocked by Meta (code 10 – requires pages_read_engagement or Page Public Content Access).');
+                } else {
+                  const retryErrorText = await retryResponse.text();
+                  try {
+                    const retryErrorData = JSON.parse(retryErrorText);
+                    if (retryErrorData.error) {
+                      const retryErrorCode = retryErrorData.error.code;
+                      const retryErrorMessage = retryErrorData.error.message || '';
+                      if (retryErrorCode === 10 && !isInstagram) {
+                        hasErrorCode10 = true;
+                        console.error(`Facebook Error: Permission blocked (code 10) on retry`);
+                      } else {
+                        console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Retry failed - ${retryErrorMessage}`);
+                      }
                     }
-                    console.error(`[retry] request failed again code ${retryErrorCode || 'N/A'}`);
+                  } catch (e) {
+                    console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Retry failed`);
                   }
-                } catch (e) {
-                  console.error(`[retry] request failed again`);
+                  commentsErrors.push(`Post ${post.id} (retry): ${retryErrorText.substring(0, 200)}`);
                 }
-                console.log('────────────────────────────────────────────');
-                // Add retry error
-                commentsErrors.push(`Post ${post.id} (retry): ${retryErrorText.substring(0, 200)}`);
+              } catch (retryError) {
+                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception during retry`);
+                commentsErrors.push(`Post ${post.id} (retry error): ${String(retryError).substring(0, 200)}`);
               }
-            } catch (retryError) {
-              console.error(`[retry] error during retry`);
-              console.log('────────────────────────────────────────────');
-              commentsErrors.push(`Post ${post.id} (retry error): ${String(retryError).substring(0, 200)}`);
-            }
           }
         }
       } catch (error) {
         // Silent fail - continue with next post
       }
     }
-    
-    console.log(`[result] ${totalCommentsFetched} total, ${newCommentsCount} new, ${skippedCommentsCount} skipped`);
-    console.log('───────────────────────────────────────');
+
+    console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: ${totalCommentsFetched} total comments, ${newCommentsCount} new, ${skippedCommentsCount} skipped`);
 
     // Update lastCommentsFetchedAt after successful comment fetch
     if (commentsFetchSuccess) {
@@ -751,9 +838,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('──────────── FB COMMENTS ERROR ────────────');
-    console.error('[error] Internal server error');
-    console.error('────────────────────────────────────────────');
+    console.error('Error: Internal server error in comments route');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

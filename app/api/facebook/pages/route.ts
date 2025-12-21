@@ -51,12 +51,10 @@ export async function GET(request: NextRequest) {
     const exchangeToken = async (shortLivedToken: string): Promise<string | null> => {
       try {
         if (!process.env.FACEBOOK_CLIENT_ID || !process.env.FACEBOOK_CLIENT_SECRET) {
-          console.error('Facebook client ID or secret not configured');
           return null;
         }
         
         const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${shortLivedToken}`;
-        console.log('Attempting to exchange Facebook token...');
         const tokenResponse = await fetch(tokenExchangeUrl);
         
         if (tokenResponse.ok) {
@@ -64,12 +62,11 @@ export async function GET(request: NextRequest) {
           const longLivedToken = tokenData.access_token;
           
           if (!longLivedToken) {
-            console.error('No access token in exchange response:', tokenData);
             return null;
           }
           
           // Update the stored token in database
-          const updateResult = await prisma.account.updateMany({
+          await prisma.account.updateMany({
             where: {
               id: account.id,
             },
@@ -78,14 +75,10 @@ export async function GET(request: NextRequest) {
             },
           });
           
-          console.log('Successfully refreshed Facebook token, updated rows:', updateResult.count);
           return longLivedToken;
-        } else {
-          const errorText = await tokenResponse.text();
-          console.error('Failed to exchange Facebook token. Status:', tokenResponse.status, 'Error:', errorText);
         }
       } catch (error) {
-        console.error('Error exchanging Facebook token:', error);
+        // Token exchange failed
       }
       return null;
     };
@@ -93,9 +86,7 @@ export async function GET(request: NextRequest) {
     let accessToken = account.access_token;
 
     // ALWAYS try to exchange token first to ensure we have a long-lived token
-    console.log('[API] Fetching Facebook pages for user:', session.user.id);
-    console.log('[API] Current token length:', accessToken?.length || 0);
-    console.log('[API] Token preview:', accessToken ? `${accessToken.substring(0, 20)}...` : 'NO TOKEN');
+    console.log('Facebook Pages: Fetching pages...');
     
     // Verify user token has required permissions
     try {
@@ -105,33 +96,19 @@ export async function GET(request: NextRequest) {
       if (userTokenDebugResponse.ok) {
         const userTokenDebugData = await userTokenDebugResponse.json();
         const userScopes = userTokenDebugData.data?.scopes || [];
-        console.log('[API] User token scopes:', userScopes);
-        
-        if (!userScopes.includes('pages_read_engagement')) {
-          console.warn('[API] ⚠️ User token missing pages_read_engagement permission');
-          console.warn('[API] This means page tokens will also not have this permission');
-          console.warn('[API] User needs to reconnect Facebook account to grant the permission');
-        } else {
-          console.log('[API] ✅ User token has pages_read_engagement permission');
-        }
+        // Check if user token has pages_read_engagement permission
       }
     } catch (debugError) {
-      console.error('[API] Error debugging user token:', debugError);
+      // Error debugging user token
     }
     
     // Try to exchange token immediately if it's short-lived
-    console.log('[API] Attempting token exchange...');
     const refreshedToken = await exchangeToken(accessToken);
     if (refreshedToken) {
       accessToken = refreshedToken;
-      console.log('[API] ✅ Token exchanged to long-lived before fetching pages');
-      console.log('[API] New token length:', accessToken.length);
-    } else {
-      console.log('[API] ⚠️ Token exchange failed or skipped, using original token');
     }
 
     // First, verify the token has the right permissions by checking user info
-    console.log('[API] Verifying token permissions...');
     const meUrl = `https://graph.facebook.com/v18.0/me?access_token=${accessToken}`;
     const meResponse = await fetch(meUrl);
     
@@ -146,11 +123,10 @@ export async function GET(request: NextRequest) {
       
       // Check if it's a rate limit error (code 4, is_transient: true)
       if (meErrorData.error?.code === 4 && meErrorData.error?.is_transient === true) {
-        console.warn('[API] ⚠️ Facebook rate limit reached. Skipping token verification and continuing...');
-        console.warn('[API] Rate limit will reset automatically. This is temporary.');
+        console.error('Facebook Rate Limit: Skipping token verification');
         // Continue without verification - rate limit is temporary
       } else {
-        console.error('[API] ❌ Token validation failed:', meErrorText);
+        console.error('Facebook Error: Token validation failed');
         return NextResponse.json({
           connectedPages,
           pages: [],
@@ -158,43 +134,37 @@ export async function GET(request: NextRequest) {
           error: 'Facebook token is invalid. Please reconnect your Facebook account.',
         });
       }
-    } else {
-      const meData = await meResponse.json();
-      console.log('[API] ✅ Token is valid for user:', meData.name || meData.id);
     }
 
     // Fetch user's Facebook pages
     // Note: We need pages_show_list permission for this to work
     // This endpoint returns Page access tokens (not user tokens) for each page
     const pagesUrl = `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,category&limit=100`;
-    console.log('[API] Fetching pages from Facebook API...');
-    console.log('[API] URL:', pagesUrl.replace(accessToken, '[TOKEN]'));
     
     let pagesResponse = await fetch(pagesUrl);
-    
-    console.log('[API] Facebook pages API response status:', pagesResponse.status);
 
     // If token expired, try to exchange it for a long-lived token
     if (!pagesResponse.ok) {
       const errorText = await pagesResponse.text();
-      console.error('Facebook API error:', errorText);
       
       // Check if it's a token error
       try {
         const errorData = JSON.parse(errorText);
         if (errorData.error?.code === 190 || errorData.error?.type === 'OAuthException') {
           // Access token expired or invalid - try to exchange for long-lived token
-          console.log('Facebook access token expired, attempting to refresh...');
+          console.log('Facebook: Token expired, attempting refresh...');
           const refreshedToken = await exchangeToken(accessToken);
           
           if (refreshedToken) {
             // Retry with refreshed token
             accessToken = refreshedToken;
+            console.log('Facebook: Token refreshed successfully');
             pagesResponse = await fetch(
               `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`
             );
           } else {
             // Could not refresh, return error
+            console.error('Facebook Error: Failed to refresh token');
             return NextResponse.json({
               connectedPages,
               pages: [],
@@ -220,14 +190,11 @@ export async function GET(request: NextRequest) {
 
     // Parse response
     const responseText = await pagesResponse.text();
-    console.log('[API] Raw response text:', responseText.substring(0, 500));
     
     let pagesData: any;
     try {
       pagesData = JSON.parse(responseText);
     } catch (parseError) {
-      console.error('[API] ❌ Failed to parse response as JSON:', parseError);
-      console.error('[API] Response text:', responseText);
       return NextResponse.json({
         connectedPages,
         pages: [],
@@ -236,18 +203,11 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    console.log('[API] Parsed response data:', JSON.stringify(pagesData, null, 2));
-    
     // Check for errors in response
     if (pagesData.error) {
-      console.error('[API] ❌ Facebook API returned error:', pagesData.error);
-      console.error('[API] Error code:', pagesData.error.code);
-      console.error('[API] Error type:', pagesData.error.type);
-      console.error('[API] Error message:', pagesData.error.message);
-      
       // Check if it's a rate limit error (code 4, is_transient: true)
       if (pagesData.error.code === 4 && pagesData.error.is_transient === true) {
-        console.warn('[API] ⚠️ Facebook rate limit reached. Returning connected pages from database.');
+        console.error('Facebook Rate Limit: Cannot fetch pages (code 4). Returning cached pages.');
         // Return connected pages from database even if we can't fetch new ones
         // This allows the app to continue working
         return NextResponse.json({
@@ -268,11 +228,9 @@ export async function GET(request: NextRequest) {
     }
     
     const facebookPages = pagesData.data || [];
-    console.log('[API] ✅ Found Facebook pages:', facebookPages.length);
+    console.log(`Facebook Pages: Found ${facebookPages.length} pages`);
     
     if (facebookPages.length > 0) {
-      console.log('[API] Page names:', facebookPages.map((p: any) => p.name));
-      
       // Refresh stored page tokens for existing connected pages to ensure they have latest permissions
       // This is important when permissions are added after pages were initially connected
       try {
@@ -298,9 +256,6 @@ export async function GET(request: NextRequest) {
                     updatedAt: new Date(),
                   },
                 });
-                console.log(`[API] ✅ Refreshed page token for ${page.name} with updated permissions`);
-              } else {
-                console.warn(`[API] ⚠️ Fresh token for ${page.name} still missing pages_read_engagement`);
               }
             } else {
               // Check if it's a rate limit error
@@ -313,7 +268,7 @@ export async function GET(request: NextRequest) {
               }
               
               if (errorData.error?.code === 4 && errorData.error?.is_transient === true) {
-                console.warn(`[API] ⚠️ Rate limit reached while verifying token for ${page.name}. Skipping verification.`);
+                console.error(`Facebook Rate Limit: Skipping token verification for ${page.name}`);
                 // Still update the token even if we can't verify it (rate limit is temporary)
                 await prisma.connectedPage.updateMany({
                   where: {
@@ -324,22 +279,13 @@ export async function GET(request: NextRequest) {
                     updatedAt: new Date(),
                   },
                 });
-                console.log(`[API] ✅ Updated page token for ${page.name} (verification skipped due to rate limit)`);
-              } else {
-                console.warn(`[API] ⚠️ Failed to verify token for ${page.name}:`, errorText.substring(0, 200));
               }
             }
           }
         }
       } catch (refreshError) {
-        console.error('[API] Error refreshing page tokens:', refreshError);
         // Don't fail the request if token refresh fails
       }
-    } else {
-      console.log('[API] ⚠️ No pages found. This could mean:');
-      console.log('[API]   1. User has no Facebook pages');
-      console.log('[API]   2. User doesn\'t have admin access to any pages');
-      console.log('[API]   3. Token doesn\'t have required permissions');
     }
 
     // Return Facebook pages immediately, fetch Instagram in parallel (non-blocking)
@@ -382,7 +328,6 @@ export async function GET(request: NextRequest) {
           }
         }
       } catch (error) {
-        console.error(`Error fetching Instagram account for page ${page.id}:`, error);
         return null;
       }
       return null;
@@ -398,15 +343,9 @@ export async function GET(request: NextRequest) {
       instagramPages,
     };
     
-    console.log('[API] ✅ Returning response with:', {
-      connectedPages: response.connectedPages.length,
-      pages: response.pages.length,
-      instagramPages: response.instagramPages.length,
-    });
-    
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error fetching Facebook pages:', error);
+    console.error('Facebook Pages Error: Internal server error');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -446,7 +385,6 @@ export async function POST(request: NextRequest) {
 
         if (account?.access_token) {
           // FIRST: Check if the user's main token has the permission
-          console.log('[Pages API] Checking user token permissions...');
           const userTokenDebugUrl = `https://graph.facebook.com/v18.0/debug_token?input_token=${account.access_token}&access_token=${account.access_token}`;
           const userTokenDebugResponse = await fetch(userTokenDebugUrl);
           
@@ -454,23 +392,7 @@ export async function POST(request: NextRequest) {
           if (userTokenDebugResponse.ok) {
             const userTokenDebugData = await userTokenDebugResponse.json();
             const userScopes = userTokenDebugData.data?.scopes || [];
-            console.log('[Pages API] User token scopes:', userScopes);
             userTokenHasPermission = userScopes.includes('pages_read_engagement');
-            
-            if (!userTokenHasPermission) {
-              console.error('[Pages API] ❌ CRITICAL: User token is missing pages_read_engagement permission!');
-              console.error('[Pages API] This means page tokens will NOT have this permission either.');
-              console.error('[Pages API] Possible reasons:');
-              console.error('[Pages API] 1. Permission requires Facebook App Review and hasn\'t been approved yet');
-              console.error('[Pages API] 2. User didn\'t grant the permission during OAuth');
-              console.error('[Pages API] 3. App is in development mode and permission requires review');
-              console.error('[Pages API] User MUST reconnect and ensure they grant the permission, OR submit for App Review.');
-            } else {
-              console.log('[Pages API] ✅ User token has pages_read_engagement permission');
-            }
-          } else {
-            const userTokenErrorText = await userTokenDebugResponse.text();
-            console.error('[Pages API] Error debugging user token:', userTokenErrorText);
           }
           
           // Verify the page token has the required permissions
@@ -480,15 +402,10 @@ export async function POST(request: NextRequest) {
           if (debugResponse.ok) {
             const debugData = await debugResponse.json();
             const scopes = debugData.data?.scopes || [];
-            console.log('[Pages API] Page token scopes:', scopes);
             
             if (!scopes.includes('pages_read_engagement')) {
-              console.warn('[Pages API] ⚠️ Page token missing pages_read_engagement permission');
-              
               // Only try to refresh if user token has permission
               if (userTokenHasPermission) {
-                console.log('[Pages API] User token has permission, fetching fresh page token...');
-                
                 // Fetch fresh page tokens from Facebook
                 const pagesUrl = `https://graph.facebook.com/v24.0/me/accounts?access_token=${account.access_token}&fields=id,name,access_token&limit=100`;
                 const pagesResponse = await fetch(pagesUrl);
@@ -505,37 +422,18 @@ export async function POST(request: NextRequest) {
                     if (freshDebugResponse.ok) {
                       const freshDebugData = await freshDebugResponse.json();
                       const freshScopes = freshDebugData.data?.scopes || [];
-                      console.log('[Pages API] Fresh page token scopes:', freshScopes);
                       
                       if (freshScopes.includes('pages_read_engagement')) {
                         finalPageAccessToken = page.access_token;
-                        console.log('[Pages API] ✅ Using fresh page token with pages_read_engagement permission');
-                      } else {
-                        console.error('[Pages API] ❌ Fresh token also missing permission even though user token has it!');
-                        console.error('[Pages API] This is unusual - page tokens should inherit permissions from user token.');
                       }
                     }
-                  } else {
-                    console.error('[Pages API] Page not found when fetching fresh tokens');
                   }
-                } else {
-                  const errorText = await pagesResponse.text();
-                  console.error('[Pages API] Failed to fetch fresh page tokens:', errorText);
                 }
-              } else {
-                console.error('[Pages API] ❌ Cannot refresh page token - user token missing permission');
-                console.error('[Pages API] Page token will also be missing permission. User needs to reconnect.');
               }
-            } else {
-              console.log('[Pages API] ✅ Page token has pages_read_engagement permission');
             }
-          } else {
-            const errorText = await debugResponse.text();
-            console.error('[Pages API] Error debugging page token:', errorText);
           }
         }
       } catch (error) {
-        console.error('[Pages API] Error verifying/refreshing page token:', error);
         // Continue with original token if verification fails
       }
     }
@@ -564,10 +462,8 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      console.log('Page connected successfully:', { pageId, pageName, provider, userId: session.user.id });
       return NextResponse.json({ success: true, page: connectedPage });
     } catch (dbError: any) {
-      console.error('Database error connecting page:', dbError);
       // Check for unique constraint violation
       if (dbError.code === 'P2002') {
         return NextResponse.json(
@@ -578,12 +474,6 @@ export async function POST(request: NextRequest) {
       throw dbError; // Re-throw to be caught by outer catch
     }
   } catch (error: any) {
-    console.error('Error connecting page:', error);
-    console.error('Error details:', {
-      message: error?.message,
-      code: error?.code,
-      stack: error?.stack,
-    });
     return NextResponse.json(
       { 
         error: error?.message || 'Internal server error',
@@ -638,7 +528,6 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Page disconnected successfully' });
   } catch (error) {
-    console.error('Error disconnecting page:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
