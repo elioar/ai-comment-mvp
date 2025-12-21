@@ -5,12 +5,23 @@ import { prisma } from '@/lib/prisma';
 
 const { auth } = NextAuth(authOptions);
 
+// Cache for pages data (5 minutes)
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const pagesCache = new Map<string, { data: any; timestamp: number }>();
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check cache first
+    const cacheKey = `pages_${session.user.id}`;
+    const cached = pagesCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return NextResponse.json(cached.data);
     }
 
     // Get connected pages from database
@@ -139,7 +150,7 @@ export async function GET(request: NextRequest) {
     // Fetch user's Facebook pages
     // Note: We need pages_show_list permission for this to work
     // This endpoint returns Page access tokens (not user tokens) for each page
-    const pagesUrl = `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,category&limit=100`;
+    const pagesUrl = `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,category,picture.type(large)&limit=100`;
     
     let pagesResponse = await fetch(pagesUrl);
 
@@ -160,7 +171,7 @@ export async function GET(request: NextRequest) {
             accessToken = refreshedToken;
             console.log('Facebook: Token refreshed successfully');
             pagesResponse = await fetch(
-              `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token`
+              `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,picture.type(large)`
             );
           } else {
             // Could not refresh, return error
@@ -231,58 +242,28 @@ export async function GET(request: NextRequest) {
     console.log(`Facebook Pages: Found ${facebookPages.length} pages`);
     
     if (facebookPages.length > 0) {
-      // Refresh stored page tokens for existing connected pages to ensure they have latest permissions
-      // This is important when permissions are added after pages were initially connected
+      // Refresh stored page tokens for existing connected pages
+      // Skip token verification to speed up - just update tokens directly
+      // Token verification can be done on-demand when needed
       try {
-        for (const page of facebookPages) {
+        const updatePromises = facebookPages.map(async (page: any) => {
           const existingPage = connectedPages.find(cp => cp.pageId === page.id && cp.provider === 'facebook');
           if (existingPage && page.access_token) {
-            // Verify the fresh token has the required permissions
-            const debugTokenUrl = `https://graph.facebook.com/v18.0/debug_token?input_token=${page.access_token}&access_token=${accessToken}`;
-            const debugResponse = await fetch(debugTokenUrl);
-            
-            if (debugResponse.ok) {
-              const debugData = await debugResponse.json();
-              const scopes = debugData.data?.scopes || [];
-              
-              if (scopes.includes('pages_read_engagement')) {
-                // Update the stored token with the fresh one
-                await prisma.connectedPage.updateMany({
-                  where: {
-                    id: existingPage.id,
-                  },
-                  data: {
-                    pageAccessToken: page.access_token,
-                    updatedAt: new Date(),
-                  },
-                });
-              }
-            } else {
-              // Check if it's a rate limit error
-              const errorText = await debugResponse.text();
-              let errorData: any = {};
-              try {
-                errorData = JSON.parse(errorText);
-              } catch (e) {
-                // Not JSON
-              }
-              
-              if (errorData.error?.code === 4 && errorData.error?.is_transient === true) {
-                console.error(`Facebook Rate Limit: Skipping token verification for ${page.name}`);
-                // Still update the token even if we can't verify it (rate limit is temporary)
-                await prisma.connectedPage.updateMany({
-                  where: {
-                    id: existingPage.id,
-                  },
-                  data: {
-                    pageAccessToken: page.access_token,
-                    updatedAt: new Date(),
-                  },
-                });
-              }
-            }
+            // Update token directly without verification for speed
+            await prisma.connectedPage.updateMany({
+              where: {
+                id: existingPage.id,
+              },
+              data: {
+                pageAccessToken: page.access_token,
+                updatedAt: new Date(),
+              },
+            });
           }
-        }
+        });
+        
+        // Execute all updates in parallel
+        await Promise.all(updatePromises);
       } catch (refreshError) {
         // Don't fail the request if token refresh fails
       }
@@ -294,54 +275,69 @@ export async function GET(request: NextRequest) {
       provider: 'facebook',
     }));
 
-    // Fetch Instagram Business accounts in PARALLEL for all pages (much faster)
-    const instagramPromises = facebookPages.map(async (page: any) => {
-      try {
-        // Check if this page has an Instagram Business account
-        const instagramAccountResponse = await fetch(
-          `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
-        );
+    // Only fetch Instagram if user has connected Instagram pages or if we need to discover them
+    // Check if any connected page is Instagram or if we should check for new Instagram accounts
+    const hasInstagramPages = connectedPages.some(cp => cp.provider === 'instagram');
+    const shouldFetchInstagram = hasInstagramPages || facebookPages.length > 0;
 
-        if (instagramAccountResponse.ok) {
-          const instagramAccountData = await instagramAccountResponse.json();
-          
-          if (instagramAccountData.instagram_business_account?.id) {
-            const instagramAccountId = instagramAccountData.instagram_business_account.id;
+    let instagramPages: any[] = [];
+
+    if (shouldFetchInstagram) {
+      // Fetch Instagram Business accounts in PARALLEL for all pages (much faster)
+      const instagramPromises = facebookPages.map(async (page: any) => {
+        try {
+          // Check if this page has an Instagram Business account
+          const instagramAccountResponse = await fetch(
+            `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
+          );
+
+          if (instagramAccountResponse.ok) {
+            const instagramAccountData = await instagramAccountResponse.json();
             
-            // Get Instagram account details
-            const instagramDetailsResponse = await fetch(
-              `https://graph.facebook.com/v18.0/${instagramAccountId}?fields=id,username,name,profile_picture_url&access_token=${page.access_token}`
-            );
+            if (instagramAccountData.instagram_business_account?.id) {
+              const instagramAccountId = instagramAccountData.instagram_business_account.id;
+              
+              // Get Instagram account details
+              const instagramDetailsResponse = await fetch(
+                `https://graph.facebook.com/v18.0/${instagramAccountId}?fields=id,username,name,profile_picture_url&access_token=${page.access_token}`
+              );
 
-            if (instagramDetailsResponse.ok) {
-              const instagramDetails = await instagramDetailsResponse.json();
-              return {
-                id: instagramDetails.id,
-                username: instagramDetails.username || instagramDetails.name || `Instagram ${instagramDetails.id}`,
-                name: instagramDetails.name || instagramDetails.username || `Instagram ${instagramDetails.id}`,
-                profile_picture_url: instagramDetails.profile_picture_url,
-                access_token: page.access_token,
-                facebook_page_id: page.id,
-                provider: 'instagram',
-              };
+              if (instagramDetailsResponse.ok) {
+                const instagramDetails = await instagramDetailsResponse.json();
+                return {
+                  id: instagramDetails.id,
+                  username: instagramDetails.username || instagramDetails.name || `Instagram ${instagramDetails.id}`,
+                  name: instagramDetails.name || instagramDetails.username || `Instagram ${instagramDetails.id}`,
+                  profile_picture_url: instagramDetails.profile_picture_url,
+                  access_token: page.access_token,
+                  facebook_page_id: page.id,
+                  provider: 'instagram',
+                };
+              }
             }
           }
+        } catch (error) {
+          return null;
         }
-      } catch (error) {
         return null;
-      }
-      return null;
-    });
+      });
 
-    // Wait for all Instagram fetches in parallel (much faster than sequential)
-    const instagramResults = await Promise.all(instagramPromises);
-    const instagramPages = instagramResults.filter((page): page is any => page !== null);
+      // Wait for all Instagram fetches in parallel (much faster than sequential)
+      const instagramResults = await Promise.all(instagramPromises);
+      instagramPages = instagramResults.filter((page): page is any => page !== null);
+    }
     
     const response = {
       connectedPages,
       pages: facebookPagesResponse,
       instagramPages,
     };
+    
+    // Store in cache before returning
+    pagesCache.set(cacheKey, {
+      data: response,
+      timestamp: Date.now()
+    });
     
     return NextResponse.json(response);
   } catch (error) {

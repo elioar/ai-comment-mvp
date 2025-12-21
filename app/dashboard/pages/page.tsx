@@ -788,7 +788,11 @@ export default function PagesPage() {
                         
                         {/* Display Connected Pages */}
                         <div className="space-y-4">
-                          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Previously Connected Pages</h2>
+                          <div className="mb-6">
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Select a Page to View Comments</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Choose a connected Facebook or Instagram page to view and manage its comments</p>
+                          </div>
+                          <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Connected Pages</h3>
                           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {connectedPages.map((connectedPage) => (
                               <div
@@ -820,14 +824,17 @@ export default function PagesPage() {
                                     </p>
                                   </div>
                                 </div>
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between gap-3">
                                   <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300">
                                     Disconnected
                                   </span>
                                   <Link
-                                    href={`/dashboard/comments?pageId=${connectedPage.pageId}&provider=${connectedPage.provider}`}
-                                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors font-medium text-sm"
+                                    href={`/dashboard/comments?pageId=${connectedPage.pageId}`}
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
                                   >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
                                     View Comments
                                   </Link>
                                 </div>
@@ -936,9 +943,12 @@ export default function PagesPage() {
                             
                             {isConnected && (
                               <Link
-                                href={`/dashboard/comments?pageId=${page.id}&provider=facebook`}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-sm whitespace-nowrap"
+                                href={`/dashboard/comments?pageId=${page.id}`}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
                               >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
                                 View Comments
                               </Link>
                             )}
@@ -1056,9 +1066,12 @@ export default function PagesPage() {
                             
                             {isConnected && (
                               <Link
-                                href={`/dashboard/comments?pageId=${page.id}&provider=instagram`}
-                                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-colors font-medium text-sm whitespace-nowrap"
+                                href={`/dashboard/comments?pageId=${page.id}`}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
                               >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
                                 View Comments
                               </Link>
                             )}

@@ -6,6 +6,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 
 interface Comment {
   id: string;
@@ -42,14 +43,17 @@ function CommentsPageContent() {
   const [showNewCommentsNotification, setShowNewCommentsNotification] = useState(false);
   const [currentPageName, setCurrentPageName] = useState<string | null>(null);
   const [currentPageProvider, setCurrentPageProvider] = useState<string | null>(null);
+  const [currentPageImage, setCurrentPageImage] = useState<string | null>(null);
   const [selectedPostForModal, setSelectedPostForModal] = useState<string | null>(null);
   const [refreshingTokens, setRefreshingTokens] = useState(false);
-  const [availablePages, setAvailablePages] = useState<Array<{ id: string; name: string; provider: string }>>([]);
+  const [availablePages, setAvailablePages] = useState<Array<{ id: string; name: string; provider: string; image?: string }>>([]);
   const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
   const [processingCommentId, setProcessingCommentId] = useState<string | null>(null);
+  const [backgroundFetching, setBackgroundFetching] = useState(false);
   const pageId = searchParams.get('pageId');
   const hasInitialFetch = useRef(false);
   const lastFetchedPageId = useRef<string | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -72,7 +76,7 @@ function CommentsPageContent() {
     }
   }, [status, router]);
 
-  // Fetch available pages for dropdown
+  // Fetch only connected pages for dropdown and profile images
   useEffect(() => {
     if (session) {
       const fetchPages = async () => {
@@ -80,44 +84,36 @@ function CommentsPageContent() {
           const response = await fetch('/api/facebook/pages');
           if (response.ok) {
             const data = await response.json();
-            const allPages: Array<{ id: string; name: string; provider: string }> = [];
+            const connectedPagesList: Array<{ id: string; name: string; provider: string; image?: string }> = [];
             
-            // Add Facebook pages
-            if (data.pages) {
-              data.pages.forEach((page: any) => {
-                allPages.push({
-                  id: page.id,
-                  name: page.name,
-                  provider: 'facebook'
-                });
-              });
-            }
-            
-            // Add Instagram pages
-            if (data.instagramPages) {
-              data.instagramPages.forEach((page: any) => {
-                allPages.push({
-                  id: page.id,
-                  name: page.name || page.username,
-                  provider: 'instagram'
-                });
-              });
-            }
-            
-            // Also add connected pages if available
-            if (data.connectedPages) {
+            // Only use connected pages
+            if (data.connectedPages && data.connectedPages.length > 0) {
               data.connectedPages.forEach((page: any) => {
-                if (!allPages.find(p => p.id === page.pageId)) {
-                  allPages.push({
-                    id: page.pageId,
-                    name: page.pageName,
-                    provider: page.provider
-                  });
+                // Try to find the page image from pages or instagramPages
+                let pageImage: string | null = null;
+                
+                if (page.provider === 'facebook' && data.pages) {
+                  const fbPage = data.pages.find((p: any) => p.id === page.pageId);
+                  if (fbPage) {
+                    pageImage = fbPage.picture?.data?.url || null;
+                  }
+                } else if (page.provider === 'instagram' && data.instagramPages) {
+                  const igPage = data.instagramPages.find((p: any) => p.id === page.pageId);
+                  if (igPage) {
+                    pageImage = igPage.profile_picture_url || null;
+                  }
                 }
+                
+                connectedPagesList.push({
+                  id: page.pageId,
+                  name: page.pageName,
+                  provider: page.provider,
+                  image: pageImage || undefined
+                });
               });
             }
             
-            setAvailablePages(allPages);
+            setAvailablePages(connectedPagesList);
           }
         } catch (error) {
           console.error('Error fetching pages:', error);
@@ -128,32 +124,76 @@ function CommentsPageContent() {
     }
   }, [session]);
 
+  // Auto-select first page if available and no pageId is selected
+  useEffect(() => {
+    if (!pageId && availablePages.length > 0 && session) {
+      const firstPage = availablePages[0];
+      router.push(`/dashboard/comments?pageId=${firstPage.id}`);
+    }
+  }, [availablePages, pageId, session, router]);
+
   useEffect(() => {
     if (session && pageId) {
       // Only fetch if:
       // 1. We haven't done initial fetch yet, OR
       // 2. The pageId has changed (user selected a different page)
       if (!hasInitialFetch.current || lastFetchedPageId.current !== pageId) {
+        // Clear any existing polling when pageId changes
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+        setBackgroundFetching(false);
+        
+        // Clear old comments when pageId changes and show loading skeleton
+        if (lastFetchedPageId.current !== null && lastFetchedPageId.current !== pageId) {
+          setComments([]);
+          setNewCommentsCount(0);
+          setLastFetchedAt(null);
+          setError(null);
+          setWarning(null);
+          setLoading(true); // Show skeleton during page change
+        }
+        
         hasInitialFetch.current = true;
         lastFetchedPageId.current = pageId;
         fetchComments();
       }
     }
+    
+    // Cleanup on unmount or pageId change
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
   }, [session, pageId]);
 
   const fetchComments = async () => {
     if (!pageId) return;
     
-    setLoading(true);
+    // Show loading skeleton if we don't have comments yet
+    if (comments.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     setWarning(null);
     try {
-      const response = await fetch(`/api/facebook/comments?pageId=${pageId}`);
+      // Use background=true for instant response with cached comments
+      const response = await fetch(`/api/facebook/comments?pageId=${pageId}&background=true`);
       if (response.ok) {
         const data = await response.json();
-        setComments(data.comments || []);
+        // Always update comments - cached or fresh
+        const newComments = data.comments || [];
+        setComments(newComments);
         setLastFetchedAt(data.lastFetchedAt || null);
         setNewCommentsCount(data.newCommentsCount || 0);
+        
+        // Only hide loading if we got comments (even if cached)
+        if (newComments.length > 0) {
+          setLoading(false);
+        }
         
         // Set current page info from first comment if available, or from availablePages if no comments
         if (data.comments && data.comments.length > 0) {
@@ -165,6 +205,15 @@ function CommentsPageContent() {
           if (selectedPage) {
             setCurrentPageName(selectedPage.name);
             setCurrentPageProvider(selectedPage.provider);
+            setCurrentPageImage(selectedPage.image || null);
+          }
+        }
+        
+        // Also update page image if we have comments
+        if (data.comments && data.comments.length > 0) {
+          const selectedPage = availablePages.find(p => p.id === pageId);
+          if (selectedPage) {
+            setCurrentPageImage(selectedPage.image || null);
           }
         }
         
@@ -185,6 +234,17 @@ function CommentsPageContent() {
         if (data.debug) {
           console.log('[Comments] Debug info:', data.debug);
         }
+        
+        // Always start polling for updates (background fetch or not)
+        // This ensures we catch new comments as they come in
+        if (data.backgroundFetching && data.isCached) {
+          setBackgroundFetching(true);
+        } else {
+          setBackgroundFetching(false);
+        }
+        
+        // Start continuous polling for new comments
+        pollForUpdates();
       } else {
         setError(t('dashboard.comments.failedToFetch'));
       }
@@ -196,15 +256,79 @@ function CommentsPageContent() {
     }
   };
 
+  // Poll for updates continuously to check for new comments
+  // This runs in the background and updates UI when new comments are found
+  const pollForUpdates = async () => {
+    // Clear any existing polling interval
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+    
+    pollIntervalRef.current = setInterval(async () => {
+      if (!pageId) return;
+      
+      try {
+        // Use background=true to trigger a new background fetch and get cached results
+        const response = await fetch(`/api/facebook/comments?pageId=${pageId}&background=true`);
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Get current comment IDs for comparison (use commentId, not database id)
+          setComments(currentComments => {
+            const currentCommentIds = new Set(currentComments.map(c => c.commentId));
+            
+            // Check if there are new comments
+            const newComments = (data.comments || []).filter((c: Comment) => !currentCommentIds.has(c.commentId));
+            
+            if (newComments.length > 0) {
+              // Show notification for new comments
+              setShowNewCommentsNotification(true);
+              setTimeout(() => setShowNewCommentsNotification(false), 5000);
+              setNewCommentsCount(newComments.length);
+            }
+            
+            // Always update if comments changed (new, deleted, or updated)
+            if (data.comments.length !== currentComments.length || 
+                JSON.stringify(data.comments.map((c: Comment) => c.commentId).sort()) !== 
+                JSON.stringify(currentComments.map(c => c.commentId).sort())) {
+              return data.comments || [];
+            }
+            
+            return currentComments;
+          });
+          
+          setLastFetchedAt(data.lastFetchedAt || null);
+          
+          // Update background fetching state
+          if (data.backgroundFetching) {
+            setBackgroundFetching(true);
+          } else {
+            setBackgroundFetching(false);
+          }
+        }
+      } catch (error) {
+        // Silent fail - continue polling
+      }
+    }, 5000); // Poll every 5 seconds for new comments
+  };
+
   const refreshComments = async () => {
     if (!pageId) return;
+    
+    // Stop any background polling
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    setBackgroundFetching(false);
     
     setFetching(true);
     setError(null);
     setWarning(null);
     setShowNewCommentsNotification(false);
     try {
-      const response = await fetch(`/api/facebook/comments?pageId=${pageId}`);
+      // Use sync mode (background=false) for manual refresh to get fresh data
+      const response = await fetch(`/api/facebook/comments?pageId=${pageId}&background=false`);
       if (response.ok) {
         const data = await response.json();
         setComments(data.comments || []);
@@ -222,6 +346,15 @@ function CommentsPageContent() {
           if (selectedPage) {
             setCurrentPageName(selectedPage.name);
             setCurrentPageProvider(selectedPage.provider);
+            setCurrentPageImage(selectedPage.image || null);
+          }
+        }
+        
+        // Also update page image if we have comments
+        if (data.comments && data.comments.length > 0) {
+          const selectedPage = availablePages.find(p => p.id === pageId);
+          if (selectedPage) {
+            setCurrentPageImage(selectedPage.image || null);
           }
         }
         
@@ -466,22 +599,6 @@ function CommentsPageContent() {
     return null;
   }
 
-  if (!pageId) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600 dark:text-gray-300 mb-4">{t('dashboard.comments.noPageSelected')}</p>
-          <Link
-            href="/dashboard/pages"
-            className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-          >
-            {t('dashboard.comments.goToPages')}
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black">
       {/* Sidebar */}
@@ -604,167 +721,298 @@ function CommentsPageContent() {
       )}
 
       <div className="lg:ml-64">
-        <header className="sticky top-0 z-20 h-16 sm:h-20 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-900">
-          <div className="h-full px-3 sm:px-6 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+        <header className="sticky top-0 z-20 bg-white/95 dark:bg-gray-950/95 backdrop-blur-md border-b border-gray-200/50 dark:border-gray-800/50 shadow-sm">
+          <div className="h-16 sm:h-20 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 sm:gap-4">
+            {/* Left Section */}
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+              {/* Mobile Menu Button */}
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-1.5 sm:p-2 -ml-1 sm:-ml-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-900 rounded-lg transition-all flex-shrink-0"
+                className="lg:hidden p-2 -ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all duration-200 flex-shrink-0"
               >
-                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                  <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">
-                    {t('dashboard.menu.comments') || 'Comments'}
-                  </h1>
-                  {currentPageName && availablePages.length > 0 && (
-                    <div className="relative">
-                      <button
-                        onClick={() => setPageDropdownOpen(!pageDropdownOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-md transition-colors"
-                      >
+              
+              {/* Page Selector */}
+              {availablePages.length === 0 && !session ? (
+                <div className="relative flex-1 min-w-0">
+                  <div className="w-full sm:w-auto flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gray-200 dark:bg-gray-800 rounded-xl animate-pulse"></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="h-3 sm:h-4 w-24 sm:w-32 bg-gray-200 dark:bg-gray-800 rounded animate-pulse mb-1"></div>
+                      <div className="h-2 sm:h-3 w-16 sm:w-20 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                    </div>
+                    <div className="w-4 h-4 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                  </div>
+                </div>
+              ) : availablePages.length > 0 ? (
+                <div className="relative flex-1 min-w-0">
+                  <button
+                    onClick={() => setPageDropdownOpen(!pageDropdownOpen)}
+                    className="group w-full sm:w-auto flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-2 bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-800/50 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
+                  >
+                    {currentPageImage ? (
+                      <img
+                        src={currentPageImage}
+                        alt={currentPageName || 'Select Page'}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl object-cover flex-shrink-0 border border-gray-200 dark:border-gray-700"
+                      />
+                    ) : (
+                      <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        currentPageProvider === 'instagram'
+                          ? 'bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500'
+                          : 'bg-gradient-to-br from-blue-600 to-blue-700'
+                      }`}>
                         {currentPageProvider === 'instagram' ? (
-                          <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-pink-600 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                           </svg>
                         ) : (
-                          <svg className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                           </svg>
                         )}
-                        <span className="hidden sm:inline text-xs font-medium text-gray-700 dark:text-gray-300">
-                          {currentPageName}
-                        </span>
-                        <svg className={`w-3 h-3 text-gray-500 dark:text-gray-400 transition-transform ${pageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      
-                      {/* Dropdown Menu */}
-                      {pageDropdownOpen && (
-                        <>
-                          <div 
-                            className="fixed inset-0 z-10" 
-                            onClick={() => setPageDropdownOpen(false)}
-                          ></div>
-                          <div className="fixed sm:absolute top-[65%] sm:top-full left-1/2 sm:left-0 -translate-x-1/2 sm:translate-x-0 sm:translate-y-0 sm:mt-1 mt-0 w-[90vw] sm:w-56 md:w-64 max-w-sm sm:max-w-none bg-white dark:bg-gray-950 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 py-1 z-20 max-h-64 overflow-y-auto custom-scrollbar">
-                            {availablePages.map((page) => {
-                              const isSelected = page.id === pageId;
-                              return (
-                                <button
-                                  key={page.id}
-                                  onClick={() => {
-                                    // Update page name and provider immediately
-                                    setCurrentPageName(page.name);
-                                    setCurrentPageProvider(page.provider);
-                                    setPageDropdownOpen(false);
-                                    router.push(`/dashboard/comments?pageId=${page.id}`);
-                                  }}
-                                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors ${
-                                    isSelected ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
-                                  }`}
-                                >
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white truncate">
+                        {currentPageName || t('dashboard.comments.selectPage') || 'Select a Page'}
+                      </div>
+                      <div className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {t('dashboard.menu.comments') || 'Comments'}
+                      </div>
+                    </div>
+                    <svg className={`w-4 h-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-all duration-200 flex-shrink-0 ${pageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {/* Dropdown Menu */}
+                  {pageDropdownOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-10 bg-black/20 sm:bg-transparent" 
+                        onClick={() => setPageDropdownOpen(false)}
+                      ></div>
+                      <div className="fixed sm:absolute top-[72px] sm:top-[84px] left-1/2 sm:left-0 -translate-x-1/2 sm:translate-x-0 sm:translate-y-2 sm:mt-2 mt-0 w-[calc(100vw-32px)] sm:w-72 max-w-sm sm:max-w-none bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 py-2 z-20 max-h-[70vh] sm:max-h-80 overflow-y-auto custom-scrollbar backdrop-blur-xl">
+                        {availablePages.map((page) => {
+                          const isSelected = page.id === pageId;
+                          return (
+                            <button
+                              key={page.id}
+                              onClick={() => {
+                                // Update page name, provider, and image immediately
+                                setCurrentPageName(page.name);
+                                setCurrentPageProvider(page.provider);
+                                setCurrentPageImage(page.image || null);
+                                setPageDropdownOpen(false);
+                                router.push(`/dashboard/comments?pageId=${page.id}`);
+                              }}
+                              className={`w-full flex items-center gap-3 px-4 py-2.5 sm:py-2 text-sm text-left transition-all duration-150 ${
+                                isSelected 
+                                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 font-medium' 
+                                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                              }`}
+                            >
+                              {page.image ? (
+                                <img
+                                  src={page.image}
+                                  alt={page.name}
+                                  className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-gray-200 dark:border-gray-700"
+                                />
+                              ) : (
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                  page.provider === 'instagram'
+                                    ? 'bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500'
+                                    : 'bg-gradient-to-br from-blue-600 to-blue-700'
+                                }`}>
                                   {page.provider === 'instagram' ? (
-                                    <svg className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
                                       <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                                     </svg>
                                   ) : (
-                                    <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
                                       <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                                     </svg>
                                   )}
-                                  <span className="flex-1 truncate">{page.name}</span>
-                                  {isSelected && (
-                                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0 flex items-center gap-2">
+                                <span className="truncate text-sm font-medium">{page.name}</span>
+                                {page.provider === 'instagram' ? (
+                                  <svg className="w-4 h-4 text-pink-600 dark:text-pink-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                  </svg>
+                                ) : (
+                                  <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                                  </svg>
+                                )}
+                              </div>
+                              {isSelected && (
+                                <svg className="w-4 h-4 flex-shrink-0 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
                 </div>
-                {comments.length > 0 && (
-                  <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                    {comments.length} {comments.length === 1 ? t('dashboard.comments.newComment') : t('dashboard.comments.newComments')}
-                  </p>
-                )}
-              </div>
+              ) : null}
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-              <ProfileDropdown />
+            {/* Right Section */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              {!session ? (
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gray-200 dark:bg-gray-800 rounded-full animate-pulse"></div>
+                  <div className="hidden sm:block">
+                    <div className="h-3 w-20 bg-gray-200 dark:bg-gray-800 rounded animate-pulse mb-1"></div>
+                    <div className="h-2 w-16 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                  </div>
+                </div>
+              ) : (
+                <ProfileDropdown />
+              )}
             </div>
           </div>
         </header>
 
-        <main className="min-h-[calc(100vh-80px)] p-3 sm:p-6 lg:p-8">
+        <main className="min-h-[calc(100vh-64px)] sm:min-h-[calc(100vh-80px)] p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
-            <div className="mb-4 sm:mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                    {t('dashboard.comments.title') || 'Comments'}
-                  </h2>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                    {t('dashboard.comments.description') || 'Manage and respond to comments from your connected pages'}
-                    {lastFetchedAt && (
-                      <span className="hidden sm:inline ml-2">
-                        • {t('dashboard.comments.lastFetched')} {formatTimeAgo(lastFetchedAt)}
-                      </span>
-                    )}
-                  </p>
-                  {lastFetchedAt && (
-                    <p className="sm:hidden text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {t('dashboard.comments.lastFetched')} {formatTimeAgo(lastFetchedAt)}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={refreshComments}
-                  disabled={fetching}
-                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md font-medium text-xs sm:text-sm w-full sm:w-auto"
-                >
-                  {fetching ? (
+            {/* Page Header Section */}
+            <div className="mb-4 sm:mb-6 relative">
+              <div className="flex items-center justify-between gap-2 sm:gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                  {loading && !currentPageName ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>{t('dashboard.comments.fetching')}</span>
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-200 dark:bg-gray-800 rounded-xl sm:rounded-2xl animate-pulse flex-shrink-0"></div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <div className="h-5 sm:h-6 lg:h-7 w-32 sm:w-40 lg:w-48 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gray-200 dark:bg-gray-800 rounded-lg sm:rounded-xl animate-pulse"></div>
+                        </div>
+                        <div className="h-3 sm:h-4 w-24 sm:w-32 bg-gray-200 dark:bg-gray-800 rounded animate-pulse mt-1.5 sm:mt-2"></div>
+                      </div>
+                    </>
+                  ) : currentPageName ? (
+                    <>
+                      {currentPageImage ? (
+                        <img
+                          src={currentPageImage}
+                          alt={currentPageName}
+                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl object-cover border border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0"
+                        />
+                      ) : (
+                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+                          currentPageProvider === 'instagram'
+                            ? 'bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500'
+                            : 'bg-gradient-to-br from-blue-600 to-blue-700'
+                        }`}>
+                          {currentPageProvider === 'instagram' ? (
+                            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                            </svg>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <h2 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 dark:text-white truncate">
+                            {currentPageName} {t('dashboard.comments.title') || 'Comments'}
+                          </h2>
+                          <button
+                            onClick={refreshComments}
+                            disabled={fetching}
+                            className="group relative inline-flex items-center justify-center gap-1 px-1.5 py-1.5 sm:px-3 sm:py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg sm:rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex-shrink-0"
+                          >
+                            {fetching ? (
+                              <svg className="animate-spin h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            ) : (
+                              <>
+                                <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-600 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                {newCommentsCount > 0 && (
+                                  <span className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 px-1 py-0.5 sm:px-1.5 sm:py-0.5 bg-blue-600 text-white text-[8px] sm:text-[10px] font-semibold rounded-full shadow-sm min-w-[16px] sm:min-w-[18px] text-center">
+                                    {newCommentsCount}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        {lastFetchedAt && (
+                          <p className="text-[9px] sm:text-xs text-gray-500 dark:text-gray-400 mt-0.5 sm:mt-1">
+                            {t('dashboard.comments.lastFetched')} {formatTimeAgo(lastFetchedAt)}
+                          </p>
+                        )}
+                      </div>
                     </>
                   ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      <span>{t('dashboard.comments.refresh')}</span>
-                      {newCommentsCount > 0 && (
-                        <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs font-semibold rounded-full">
-                          {newCommentsCount}
-                        </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <h2 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 dark:text-white">
+                          {t('dashboard.comments.title') || 'Comments'}
+                        </h2>
+                        <button
+                          onClick={refreshComments}
+                          disabled={fetching}
+                          className="group relative inline-flex items-center justify-center gap-1 px-1.5 py-1.5 sm:px-3 sm:py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg sm:rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex-shrink-0"
+                        >
+                          {fetching ? (
+                            <svg className="animate-spin h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-600 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              {newCommentsCount > 0 && (
+                                <span className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 px-1 py-0.5 sm:px-1.5 sm:py-0.5 bg-blue-600 text-white text-[8px] sm:text-[10px] font-semibold rounded-full shadow-sm min-w-[16px] sm:min-w-[18px] text-center">
+                                  {newCommentsCount}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      {lastFetchedAt && (
+                        <p className="text-[9px] sm:text-xs text-gray-500 dark:text-gray-400 mt-0.5 sm:mt-1">
+                          {t('dashboard.comments.lastFetched')} {formatTimeAgo(lastFetchedAt)}
+                        </p>
                       )}
-                    </>
+                    </div>
                   )}
-                </button>
+                </div>
               </div>
               
               {/* Stats Bar */}
               {comments.length > 0 && (
-                <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4 text-xs sm:text-sm mt-3 sm:mt-4 px-1">
                   <div className="flex items-center gap-1.5 sm:gap-2 text-gray-600 dark:text-gray-400">
-                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                     <span className="font-medium">{comments.length}</span>
                     <span className="hidden sm:inline">{t('dashboard.comments.totalComments')}</span>
                   </div>
                   <div className="flex items-center gap-1.5 sm:gap-2 text-green-600 dark:text-green-400">
-                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full flex-shrink-0"></div>
                     <span>
                       {comments.filter(c => c.status === 'replied').length} {t('dashboard.comments.replied')}
                     </span>
@@ -795,8 +1043,8 @@ function CommentsPageContent() {
             )}
 
             {warning && (
-              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl flex items-center justify-between gap-2 sm:gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                   <svg className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
@@ -804,7 +1052,7 @@ function CommentsPageContent() {
                 </div>
                 <button
                   onClick={() => setWarning(null)}
-                  className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200 flex-shrink-0 p-1"
+                  className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200 flex-shrink-0 p-1 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded-lg transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -814,10 +1062,10 @@ function CommentsPageContent() {
             )}
 
             {error && (
-              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
                 <div className="flex items-start justify-between gap-2 sm:gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className="text-red-800 dark:text-red-200 text-xs sm:text-sm mb-2 break-words">{error}</p>
+                    <p className="text-red-800 dark:text-red-200 text-xs sm:text-sm mb-2 sm:mb-3 break-words">{error}</p>
                     {error.includes('App Review') && (
                       <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                         <p className="text-yellow-800 dark:text-yellow-200 text-xs font-medium mb-2">How to fix this:</p>
@@ -884,29 +1132,82 @@ function CommentsPageContent() {
               </div>
             )}
 
-            {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="text-center">
-                  <div className="w-12 h-12 border-4 border-gray-200 dark:border-gray-800 border-t-blue-600 dark:border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    {mounted ? t('dashboard.comments.loadingComments') : 'Loading...'}
-                  </p>
+            {loading || (comments.length === 0 && !error) ? (
+              <div className="space-y-3 sm:space-y-4 lg:space-y-5">
+                {[...Array(5)].map((_, index) => (
+                  <div
+                    key={index}
+                    className="group relative bg-white dark:bg-gray-900/50 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-gray-100 dark:border-gray-800/50 overflow-hidden"
+                  >
+                    <div className="p-3 sm:p-4 lg:p-6 relative">
+                      <div className="flex items-start gap-2.5 sm:gap-3 lg:gap-4">
+                        {/* Avatar Skeleton */}
+                        <div className="flex-shrink-0">
+                          <div className="w-9 h-9 sm:w-11 sm:h-11 lg:w-12 lg:h-12 bg-gray-200 dark:bg-gray-800 rounded-xl sm:rounded-2xl animate-pulse"></div>
+                        </div>
+
+                        {/* Content Skeleton */}
+                        <div className="flex-1 min-w-0 pr-10 sm:pr-0">
+                          {/* Header Skeleton */}
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1.5 sm:mb-2">
+                            <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 flex-wrap">
+                              <div className="h-4 sm:h-5 lg:h-6 w-24 sm:w-32 lg:w-40 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                              <div className="h-3 sm:h-4 w-16 sm:w-20 lg:w-24 bg-gray-200 dark:bg-gray-800 rounded animate-pulse hidden sm:block"></div>
+                            </div>
+                            <div className="h-3 sm:h-4 w-20 sm:w-24 lg:w-28 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                          </div>
+
+                          {/* Message Skeleton */}
+                          <div className="space-y-2">
+                            <div className="h-3 sm:h-4 w-full bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                            <div className="h-3 sm:h-4 w-5/6 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                            <div className="h-3 sm:h-4 w-4/6 bg-gray-200 dark:bg-gray-800 rounded animate-pulse"></div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Action Buttons Skeleton */}
+                      <div className="absolute right-2 top-2 sm:right-4 sm:top-1/2 sm:-translate-y-1/2 lg:right-6 flex items-center gap-1 sm:gap-1.5 lg:gap-2">
+                        <div className="flex items-center gap-0.5 sm:gap-1">
+                          {[...Array(4)].map((_, i) => (
+                            <div
+                              key={i}
+                              className="w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 bg-gray-200 dark:bg-gray-800 rounded-lg sm:rounded-xl animate-pulse"
+                            ></div>
+                          ))}
+                        </div>
+                        <div className="w-12 sm:w-14 lg:w-16 h-5 sm:h-6 bg-gray-200 dark:bg-gray-800 rounded-full animate-pulse"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : !pageId && availablePages.length > 0 ? (
+              <div className="bg-white dark:bg-gray-950 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 p-6 sm:p-8 lg:p-12 text-center">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <svg className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
                 </div>
+                <h3 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900 dark:text-white mb-2">{t('dashboard.comments.selectPageToView') || 'Select a Page to View Comments'}</h3>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-4 sm:mb-6 max-w-sm mx-auto px-2">
+                  {t('dashboard.comments.selectPageDescription') || 'Choose a Facebook or Instagram page from the dropdown above to view and manage its comments'}
+                </p>
               </div>
             ) : comments.length === 0 ? (
-              <div className="bg-white dark:bg-gray-950 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-800 p-8 sm:p-12 text-center">
+              <div className="bg-white dark:bg-gray-950 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 p-6 sm:p-8 lg:p-12 text-center">
                 <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 dark:bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
                   <svg className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('dashboard.comments.noCommentsYet')}</h3>
+                <h3 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900 dark:text-white mb-2">{t('dashboard.comments.noCommentsYet')}</h3>
                 <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-4 sm:mb-6 max-w-sm mx-auto px-2">
                   {t('dashboard.comments.noCommentsDescription')}
                 </p>
                 <button
                   onClick={refreshComments}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors"
+                  className="inline-flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-medium transition-all shadow-sm hover:shadow-md"
                 >
                   <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -915,33 +1216,33 @@ function CommentsPageContent() {
                 </button>
               </div>
             ) : (
-              <div className="space-y-3 sm:space-y-4">
+              <div className="space-y-3 sm:space-y-4 lg:space-y-5">
                 {comments.map((comment) => {
                   return (
                     <div
                       key={comment.id}
-                      className="group relative bg-white dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl border border-gray-100 dark:border-gray-800/50 hover:border-gray-200 dark:hover:border-gray-700/50 hover:shadow-lg dark:hover:shadow-xl/10 transition-all duration-300 overflow-hidden"
+                      className="group relative bg-white dark:bg-gray-900/50 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-gray-100 dark:border-gray-800/50 hover:border-gray-200 dark:hover:border-gray-700/50 hover:shadow-lg dark:hover:shadow-xl/10 transition-all duration-300 overflow-hidden"
                     >
-                      <div className="p-3 sm:p-6 relative">
-                        <div className="flex items-start gap-3 sm:gap-4">
+                      <div className="p-3 sm:p-4 lg:p-6 relative">
+                        <div className="flex items-start gap-2.5 sm:gap-3 lg:gap-4">
                           {/* Avatar - More Modern */}
                           <div className="flex-shrink-0">
                             <div className="relative">
-                              <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-white font-bold text-xs sm:text-base shadow-lg ring-2 ring-white/20 dark:ring-gray-800/50">
+                              <div className="w-9 h-9 sm:w-11 sm:h-11 lg:w-12 lg:h-12 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-xl sm:rounded-2xl flex items-center justify-center text-white font-bold text-xs sm:text-sm lg:text-base shadow-lg ring-2 ring-white/20 dark:ring-gray-800/50">
                                 {comment.authorName.charAt(0).toUpperCase()}
                               </div>
                               {comment.status === 'replied' && (
-                                <div className="absolute -bottom-0.5 -right-0.5 sm:-bottom-1 sm:-right-1 w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                                <div className="absolute -bottom-0.5 -right-0.5 sm:-bottom-1 sm:-right-1 w-3 h-3 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
                               )}
                             </div>
                           </div>
 
                           {/* Content - Cleaner Layout */}
-                          <div className="flex-1 min-w-0 pr-12 sm:pr-0">
+                          <div className="flex-1 min-w-0 pr-10 sm:pr-0">
                             {/* Header Row - Better Mobile Layout */}
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2 sm:mb-1.5">
-                              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                                <h3 className="font-bold text-gray-900 dark:text-white text-sm sm:text-lg">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1.5 sm:mb-2">
+                              <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 flex-wrap">
+                                <h3 className="font-bold text-gray-900 dark:text-white text-sm sm:text-base lg:text-lg">
                                   {comment.authorName}
                                 </h3>
                                 {comment.pageName && (
@@ -949,36 +1250,36 @@ function CommentsPageContent() {
                                     <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
                                     <div className="flex items-center gap-1">
                                       {comment.provider === 'instagram' ? (
-                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-pink-500 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-pink-500 dark:text-pink-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                                           <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                                         </svg>
                                       ) : (
-                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                                           <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                                         </svg>
                                       )}
-                                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium truncate max-w-[100px] sm:max-w-none">
+                                      <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 font-medium truncate max-w-[80px] sm:max-w-[120px] lg:max-w-none">
                                         {comment.pageName}
                                       </span>
                                     </div>
                                   </>
                                 )}
                               </div>
-                              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-400 dark:text-gray-500">
+                              <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 text-[10px] sm:text-xs lg:text-sm text-gray-400 dark:text-gray-500">
                                 <span className="text-gray-300 dark:text-gray-600 hidden sm:inline">•</span>
                                 <span className="font-medium">{formatCommentDate(comment.createdAt)}</span>
                               </div>
                             </div>
 
                             {/* Comment Message - Better Typography */}
-                            <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words font-normal">
+                            <p className="text-xs sm:text-sm lg:text-base text-gray-700 dark:text-gray-300 leading-relaxed sm:leading-relaxed whitespace-pre-wrap break-words font-normal">
                               {comment.message}
                             </p>
                           </div>
                         </div>
                         
                         {/* Action Buttons & Pending Badge - Desktop: Middle, Mobile: Top Right */}
-                        <div className="absolute right-3 top-3 sm:right-6 sm:top-1/2 sm:-translate-y-1/2 flex items-center gap-1.5 sm:gap-2">
+                        <div className="absolute right-2 top-2 sm:right-4 sm:top-1/2 sm:-translate-y-1/2 lg:right-6 flex items-center gap-1 sm:gap-1.5 lg:gap-2">
                           {/* Action Buttons - Always visible */}
                           <div className="flex items-center gap-0.5 sm:gap-1">
                             {/* Reply with AI */}
