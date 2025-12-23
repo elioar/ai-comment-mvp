@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get connected pages from database
-    const connectedPages = await prisma.connectedPage.findMany({
+    let connectedPages = await prisma.connectedPage.findMany({
       where: {
         userId: session.user.id,
       },
@@ -38,6 +38,8 @@ export async function GET(request: NextRequest) {
         pageAccessToken: true, // Include to compare with fresh tokens
       },
     });
+
+    const hadConnectedPagesInitially = connectedPages.length > 0;
 
     // Get user's Facebook account access token
     const account = await prisma.account.findFirst({
@@ -327,6 +329,84 @@ export async function GET(request: NextRequest) {
       instagramPages = instagramResults.filter((page): page is any => page !== null);
     }
     
+    // Auto-connect all Facebook pages for brand-new users (no connected pages yet)
+    if (!hadConnectedPagesInitially && facebookPages.length > 0) {
+      try {
+        const now = new Date();
+        const autoConnectedFb = await Promise.all(
+          facebookPages
+            .filter((page: any) => page.access_token)
+            .map((page: any) =>
+              prisma.connectedPage.upsert({
+                where: {
+                  userId_pageId_provider: {
+                    userId: session.user.id,
+                    pageId: page.id,
+                    provider: 'facebook',
+                  },
+                },
+                update: {
+                  pageName: page.name,
+                  pageAccessToken: page.access_token,
+                  updatedAt: now,
+                },
+                create: {
+                  userId: session.user.id,
+                  pageId: page.id,
+                  pageName: page.name,
+                  pageAccessToken: page.access_token,
+                  provider: 'facebook',
+                },
+              })
+            )
+        );
+
+        if (autoConnectedFb.length > 0) {
+          connectedPages = [...connectedPages, ...autoConnectedFb];
+        }
+      } catch (e) {
+        console.error('Auto-connect Facebook pages failed:', e);
+      }
+    }
+
+    // Auto-connect Instagram accounts for brand-new users as well
+    if (!hadConnectedPagesInitially && instagramPages.length > 0) {
+      try {
+        const now = new Date();
+        const autoConnectedIg = await Promise.all(
+          instagramPages.map((page: any) =>
+            prisma.connectedPage.upsert({
+              where: {
+                userId_pageId_provider: {
+                  userId: session.user.id,
+                  pageId: page.id,
+                  provider: 'instagram',
+                },
+              },
+              update: {
+                pageName: page.name || page.username,
+                pageAccessToken: page.access_token,
+                updatedAt: now,
+              },
+              create: {
+                userId: session.user.id,
+                pageId: page.id,
+                pageName: page.name || page.username,
+                pageAccessToken: page.access_token,
+                provider: 'instagram',
+              },
+            })
+          )
+        );
+
+        if (autoConnectedIg.length > 0) {
+          connectedPages = [...connectedPages, ...autoConnectedIg];
+        }
+      } catch (e) {
+        console.error('Auto-connect Instagram pages failed:', e);
+      }
+    }
+
     const response = {
       connectedPages,
       pages: facebookPagesResponse,
