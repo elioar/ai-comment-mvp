@@ -49,6 +49,7 @@ function CommentsPageContent() {
   const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
   const [processingCommentId, setProcessingCommentId] = useState<string | null>(null);
   const [backgroundFetching, setBackgroundFetching] = useState(false);
+  const [selectedCommentIds, setSelectedCommentIds] = useState<string[]>([]);
   const pageId = searchParams.get('pageId');
   const hasInitialFetch = useRef(false);
   const lastFetchedPageId = useRef<string | null>(null);
@@ -426,6 +427,8 @@ function CommentsPageContent() {
       if (response.ok) {
         // Remove from local state immediately for better UX
         setComments(prev => prev.filter(c => c.id !== commentId));
+        // Also remove from selected if present
+        setSelectedCommentIds(prev => prev.filter(id => id !== commentId));
         // Also refresh to ensure sync
         await refreshComments();
       } else {
@@ -437,6 +440,60 @@ function CommentsPageContent() {
     } finally {
       setProcessingCommentId(null);
     }
+  };
+
+  const handleToggleSelectComment = (commentId: string) => {
+    setSelectedCommentIds(prev =>
+      prev.includes(commentId) ? prev.filter(id => id !== commentId) : [...prev, commentId]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (comments.length === 0) return;
+
+    if (selectedCommentIds.length === comments.length) {
+      setSelectedCommentIds([]);
+    } else {
+      setSelectedCommentIds(comments.map(c => c.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedCommentIds.length === 0) return;
+
+    const confirmed = confirm(
+      t('dashboard.comments.confirmBulkDelete', {
+        count: selectedCommentIds.length,
+      }) ||
+        `Are you sure you want to delete ${selectedCommentIds.length} selected comment(s)?`
+    );
+
+    if (!confirmed) return;
+
+    const idsToDelete = [...selectedCommentIds];
+    setProcessingCommentId(null);
+
+    for (const id of idsToDelete) {
+      try {
+        const response = await fetch(`/api/facebook/comments/${id}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          setError(errorData.error || 'Failed to delete comment');
+          break;
+        }
+
+        setComments(prev => prev.filter(c => c.id !== id));
+      } catch (error: any) {
+        setError(error?.message || 'Failed to delete comment');
+        break;
+      }
+    }
+
+    setSelectedCommentIds([]);
+    await refreshComments();
   };
 
   const changeLanguage = (lang: string) => {
@@ -587,6 +644,8 @@ function CommentsPageContent() {
   if (!session) {
     return null;
   }
+
+  const allSelected = comments.length > 0 && selectedCommentIds.length === comments.length;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black">
@@ -992,20 +1051,67 @@ function CommentsPageContent() {
               
               {/* Stats Bar */}
               {comments.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4 text-xs sm:text-sm mt-3 sm:mt-4 px-1">
-                  <div className="flex items-center gap-1.5 sm:gap-2 text-gray-600 dark:text-gray-400">
-                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    <span className="font-medium">{comments.length}</span>
-                    <span className="hidden sm:inline">{t('dashboard.comments.totalComments')}</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 lg:gap-4 text-xs sm:text-sm mt-3 sm:mt-4 px-1">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
+                    <div className="flex items-center gap-1.5 sm:gap-2 text-gray-600 dark:text-gray-400">
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      <span className="font-medium">{comments.length}</span>
+                      <span className="hidden sm:inline">{t('dashboard.comments.totalComments')}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 sm:gap-2 text-green-600 dark:text-green-400">
+                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                      <span>
+                        {comments.filter(c => c.status === 'replied').length} {t('dashboard.comments.replied')}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 sm:gap-2 text-green-600 dark:text-green-400">
-                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                    <span>
-                      {comments.filter(c => c.status === 'replied').length} {t('dashboard.comments.replied')}
-                    </span>
-                  </div>
+                  {selectedCommentIds.length > 0 && (
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAll}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-[10px] sm:text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        <span
+                          className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded border ${
+                            allSelected
+                              ? 'bg-blue-600 border-blue-600'
+                              : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600'
+                          }`}
+                        >
+                          {allSelected && (
+                            <svg className="w-2 h-2 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                              <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </span>
+                        <span>
+                          {allSelected
+                            ? t('dashboard.comments.deselectAll')
+                            : t('dashboard.comments.selectAll')}
+                        </span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                          ({selectedCommentIds.length})
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBulkDelete}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-900/20 text-[10px] sm:text-xs text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors border border-red-100 dark:border-red-900/40"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path
+                            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        <span>{t('dashboard.comments.deleteSelected')}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1186,13 +1292,39 @@ function CommentsPageContent() {
             ) : (
               <div className="space-y-3 sm:space-y-4 lg:space-y-5">
                 {comments.map((comment) => {
+                  const isSelected = selectedCommentIds.includes(comment.id);
                   return (
                     <div
                       key={comment.id}
-                      className="group relative bg-white dark:bg-gray-900/50 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-gray-100 dark:border-gray-800/50 hover:border-gray-200 dark:hover:border-gray-700/50 hover:shadow-lg dark:hover:shadow-xl/10 transition-all duration-300 overflow-hidden"
+                      className={`group relative bg-white dark:bg-gray-900/50 backdrop-blur-sm rounded-xl sm:rounded-2xl border ${
+                        isSelected
+                          ? 'border-blue-500/70 dark:border-blue-500/70 ring-1 ring-blue-500/40 dark:ring-blue-500/40'
+                          : 'border-gray-100 dark:border-gray-800/50 hover:border-gray-200 dark:hover:border-gray-700/50'
+                      } hover:shadow-lg dark:hover:shadow-xl/10 transition-all duration-300 overflow-hidden ${
+                        comment.status === 'ignored' ? 'opacity-70' : ''
+                      }`}
                     >
                       <div className="p-3 sm:p-4 lg:p-6 relative">
                         <div className="flex items-start gap-2.5 sm:gap-3 lg:gap-4">
+                          {/* Select Checkbox */}
+                          <div className="pt-1.5 sm:pt-2 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSelectComment(comment.id)}
+                              className={`w-4 h-4 sm:w-4.5 sm:h-4.5 rounded border flex items-center justify-center transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-600 border-blue-600'
+                                  : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400'
+                              }`}
+                            >
+                              {isSelected && (
+                                <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                  <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+
                           {/* Avatar - More Modern */}
                           <div className="flex-shrink-0">
                             <div className="relative">
@@ -1307,11 +1439,17 @@ function CommentsPageContent() {
                             </button>
                           </div>
                           
-                          {/* Pending Badge - Last */}
+                          {/* Status Badges - Last */}
                           {comment.status === 'pending' && (
                             <div className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-gradient-to-r from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700 text-white rounded-full text-[9px] sm:text-xs font-semibold shadow-lg backdrop-blur-sm">
                               <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse"></div>
                               <span className="hidden sm:inline">{t('dashboard.comments.pending')}</span>
+                            </div>
+                          )}
+                          {comment.status === 'ignored' && (
+                            <div className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-gray-700 dark:bg-gray-800 text-white rounded-full text-[9px] sm:text-xs font-semibold shadow-lg backdrop-blur-sm">
+                              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-400 rounded-full"></div>
+                              <span className="hidden sm:inline">{t('dashboard.comments.hidden')}</span>
                             </div>
                           )}
                         </div>

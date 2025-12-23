@@ -88,22 +88,28 @@ export async function PATCH(
       );
     }
 
-    // Call Facebook Graph API to hide/unhide comment
+    // Call Facebook/Instagram Graph API to hide/unhide comment
     const isHidden = action === 'hide';
     const isInstagram = comment.connectedPage.provider === 'instagram';
     const apiUrl = `https://graph.facebook.com/v24.0/${comment.commentId}`;
     
     console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: ${isHidden ? 'Hiding' : 'Unhiding'} comment ${comment.commentId}`);
-    
+
+    // Facebook comments use "is_hidden"; Instagram comments use "hide"
+    const form = new URLSearchParams();
+    form.append('access_token', pageAccessToken);
+    if (isInstagram) {
+      form.append('hide', isHidden ? 'true' : 'false');
+    } else {
+      form.append('is_hidden', isHidden ? 'true' : 'false');
+    }
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify({
-        is_hidden: isHidden,
-        access_token: pageAccessToken,
-      }),
+      body: form.toString(),
     });
 
     if (!response.ok) {
