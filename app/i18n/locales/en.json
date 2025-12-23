@@ -476,7 +476,7 @@
       "originalPost": "Original Post",
       "close": "Close",
       "commentBy": "Comment by",
-      "fetchedSuccessfully": "{{count}} {{count, plural, one {comment} other {comments}}} fetched successfully!",
+      "fetchedSuccessfully": "{{count, plural, one {# new comment fetched successfully} other {# new comments fetched successfully}}}.",
       "lastFetched": "Last fetched",
       "never": "Never",
       "failedToFetch": "Failed to fetch comments",

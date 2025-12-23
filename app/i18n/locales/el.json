@@ -476,7 +476,7 @@
       "originalPost": "Αρχική Δημοσίευση",
       "close": "Κλείσιμο",
       "commentBy": "Σχόλιο από",
-      "fetchedSuccessfully": "{{count}} {{count, plural, one {σχόλιο} other {σχόλια}}} ανακτήθηκε με επιτυχία!",
+      "fetchedSuccessfully": "{{count, plural, one {# νέο σχόλιο ανακτήθηκε με επιτυχία} other {# νέα σχόλια ανακτήθηκαν με επιτυχία}}.",
       "lastFetched": "Τελευταία ανάκτηση",
       "never": "Ποτέ",
       "failedToFetch": "Αποτυχία ανάκτησης σχολίων",

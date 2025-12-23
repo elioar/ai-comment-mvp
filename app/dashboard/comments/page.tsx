@@ -40,7 +40,6 @@ function CommentsPageContent() {
   const [warning, setWarning] = useState<string | null>(null);
   const [newCommentsCount, setNewCommentsCount] = useState<number>(0);
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
-  const [showNewCommentsNotification, setShowNewCommentsNotification] = useState(false);
   const [currentPageName, setCurrentPageName] = useState<string | null>(null);
   const [currentPageProvider, setCurrentPageProvider] = useState<string | null>(null);
   const [currentPageImage, setCurrentPageImage] = useState<string | null>(null);
@@ -281,9 +280,6 @@ function CommentsPageContent() {
             const newComments = (data.comments || []).filter((c: Comment) => !currentCommentIds.has(c.commentId));
             
             if (newComments.length > 0) {
-              // Show notification for new comments
-              setShowNewCommentsNotification(true);
-              setTimeout(() => setShowNewCommentsNotification(false), 5000);
               setNewCommentsCount(newComments.length);
             }
             
@@ -325,7 +321,6 @@ function CommentsPageContent() {
     setFetching(true);
     setError(null);
     setWarning(null);
-    setShowNewCommentsNotification(false);
     try {
       // Use sync mode (background=false) for manual refresh to get fresh data
       const response = await fetch(`/api/facebook/comments?pageId=${pageId}&background=false`);
@@ -356,12 +351,6 @@ function CommentsPageContent() {
           if (selectedPage) {
             setCurrentPageImage(selectedPage.image || null);
           }
-        }
-        
-        if (newCount > 0) {
-          setShowNewCommentsNotification(true);
-          // Hide notification after 5 seconds
-          setTimeout(() => setShowNewCommentsNotification(false), 5000);
         }
         
         if (data.fetched) {
@@ -1021,27 +1010,6 @@ function CommentsPageContent() {
               )}
             </div>
 
-            {showNewCommentsNotification && newCommentsCount > 0 && (
-              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-green-800 dark:text-green-200 text-xs sm:text-sm font-medium truncate">
-                    {t('dashboard.comments.fetchedSuccessfully', { count: newCommentsCount })}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowNewCommentsNotification(false)}
-                  className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 flex-shrink-0 p-1"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
             {warning && (
               <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl flex items-center justify-between gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
@@ -1167,7 +1135,7 @@ function CommentsPageContent() {
                       </div>
                       
                       {/* Action Buttons Skeleton */}
-                      <div className="absolute right-2 top-2 sm:right-4 sm:top-1/2 sm:-translate-y-1/2 lg:right-6 flex items-center gap-1 sm:gap-1.5 lg:gap-2">
+                      <div className="relative mt-3 sm:mt-0 sm:absolute sm:right-4 sm:top-1/2 sm:-translate-y-1/2 lg:right-6 flex items-center justify-between sm:justify-end gap-1 sm:gap-1.5 lg:gap-2 w-full sm:w-auto">
                         <div className="flex items-center gap-0.5 sm:gap-1">
                           {[...Array(4)].map((_, i) => (
                             <div
@@ -1278,8 +1246,8 @@ function CommentsPageContent() {
                           </div>
                         </div>
                         
-                        {/* Action Buttons & Pending Badge - Desktop: Middle, Mobile: Top Right */}
-                        <div className="absolute right-2 top-2 sm:right-4 sm:top-1/2 sm:-translate-y-1/2 lg:right-6 flex items-center gap-1 sm:gap-1.5 lg:gap-2">
+                        {/* Action Buttons & Pending Badge - Desktop: Middle, Mobile: Stacked Below */}
+                        <div className="relative mt-3 sm:mt-0 sm:absolute sm:right-4 sm:top-1/2 sm:-translate-y-1/2 lg:right-6 flex items-center justify-between sm:justify-end gap-1 sm:gap-1.5 lg:gap-2 w-full sm:w-auto">
                           {/* Action Buttons - Always visible */}
                           <div className="flex items-center gap-0.5 sm:gap-1">
                             {/* Reply with AI */}
