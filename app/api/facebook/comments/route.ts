@@ -461,9 +461,10 @@ export async function GET(request: NextRequest) {
     const lastFetchedAt = connectedPage.lastCommentsFetchedAt;
     const now = new Date();
     
-    // Add a small buffer (30 seconds) to account for clock differences and API delays
-    const fetchSince = lastFetchedAt 
-      ? new Date(lastFetchedAt.getTime() - 30000) // 30 seconds before last fetch
+    // For background polling we use fetchSince to only get new comments.
+    // For manual refresh (background = false), we fetch the full set so we can also detect deletions.
+    const fetchSince = background
+      ? (lastFetchedAt ? new Date(lastFetchedAt.getTime() - 30000) : null)
       : null;
 
     // Check if this is Instagram or Facebook
@@ -1246,6 +1247,27 @@ export async function GET(request: NextRequest) {
 
     // Update lastCommentsFetchedAt after successful comment fetch
     if (commentsFetchSuccess) {
+      // On manual refresh (background = false), we fetched the full set of comments for the posts window.
+      // Remove any comments from our database for those posts that no longer exist on Facebook/Instagram
+      try {
+        const fetchedPostIds = posts.map((p: any) => p.id);
+        const fetchedCommentIds = Array.from(
+          new Set(newComments.map((c: any) => c.id))
+        );
+
+        if (fetchedPostIds.length > 0 && fetchedCommentIds.length > 0) {
+          await prisma.comment.deleteMany({
+            where: {
+              pageId: connectedPage.id,
+              postId: { in: fetchedPostIds },
+              commentId: { notIn: fetchedCommentIds },
+            },
+          });
+        }
+      } catch (cleanupError) {
+        console.error('Failed to cleanup deleted comments from database:', cleanupError);
+      }
+
       await prisma.connectedPage.update({
         where: {
           id: connectedPage.id,
