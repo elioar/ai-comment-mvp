@@ -590,7 +590,7 @@ function CommentsPageContent() {
     if (!confirmed) return;
 
     const idsToDelete = [...selectedCommentIds];
-    setProcessingCommentId(null);
+    setReplyingCommentId(null);
 
     for (const id of idsToDelete) {
       try {
