@@ -15,6 +15,7 @@ interface Comment {
   authorName: string;
   createdAt: string;
   status: string;
+  sentiment?: string | null;
   postId: string;
   postMessage?: string;
   postImage?: string;
@@ -1493,14 +1494,21 @@ function CommentsPageContent() {
 
                               {/* Status Badge & Actions - Desktop */}
                               <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-                                {comment.status === 'pending' && (
-                                  <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-md text-xs font-medium">
-                                    {t('dashboard.comments.pending')}
-                                  </span>
-                                )}
                                 {comment.status === 'ignored' && (
                                   <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-md text-xs font-medium">
                                     {t('dashboard.comments.hidden')}
+                                  </span>
+                                )}
+                                {/* Sentiment Badge */}
+                                {comment.sentiment && (
+                                  <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${
+                                    comment.sentiment === 'positive'
+                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                      : comment.sentiment === 'negative'
+                                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                  }`}>
+                                    {comment.sentiment}
                                   </span>
                                 )}
                               </div>
@@ -1631,15 +1639,22 @@ function CommentsPageContent() {
                         {/* Action Buttons - Mobile & Desktop */}
                         <div className="mt-3 pt-3 border-t border-white/20 dark:border-gray-800/30 flex items-center justify-between">
                           {/* Status Badge - Mobile */}
-                          <div className="sm:hidden">
-                            {comment.status === 'pending' && (
-                              <span className="px-2 py-0.5 bg-amber-100/80 dark:bg-amber-900/40 backdrop-blur-sm text-amber-700 dark:text-amber-400 rounded-xl text-xs font-medium shadow-sm">
-                                {t('dashboard.comments.pending')}
-                              </span>
-                            )}
+                          <div className="sm:hidden flex items-center gap-2">
                             {comment.status === 'ignored' && (
                               <span className="px-2 py-0.5 bg-gray-100/80 dark:bg-gray-800/60 backdrop-blur-sm text-gray-600 dark:text-gray-400 rounded-xl text-xs font-medium shadow-sm">
                                 {t('dashboard.comments.hidden')}
+                              </span>
+                            )}
+                            {/* Sentiment Badge - Mobile */}
+                            {comment.sentiment && (
+                              <span className={`px-2 py-0.5 rounded-xl text-xs font-medium shadow-sm backdrop-blur-sm ${
+                                comment.sentiment === 'positive'
+                                  ? 'bg-green-100/80 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                                  : comment.sentiment === 'negative'
+                                  ? 'bg-red-100/80 dark:bg-red-900/40 text-red-700 dark:text-red-400'
+                                  : 'bg-gray-100/80 dark:bg-gray-800/60 text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {comment.sentiment}
                               </span>
                             )}
                           </div>

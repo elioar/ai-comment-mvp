@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import NextAuth from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { analyzeCommentSentiment } from '@/lib/openai';
 
 const { auth } = NextAuth(authOptions);
 
@@ -337,7 +338,7 @@ async function fetchCommentsInBackground(
               const shouldProcess = !fetchSince || commentCreatedAt > fetchSince;
               
               if (shouldProcess) {
-                await prisma.comment.upsert({
+                const savedComment = await prisma.comment.upsert({
                   where: {
                     pageId_commentId: {
                       pageId: connectedPageId,
@@ -359,6 +360,22 @@ async function fetchCommentsInBackground(
                     createdAt: commentCreatedAt,
                   },
                 });
+                
+                // Analyze sentiment if not already set
+                if (!savedComment.sentiment) {
+                  console.log(`[Comments API] Analyzing sentiment for comment ${savedComment.id}`);
+                  const sentiment = await analyzeCommentSentiment(commentMessage);
+                  if (sentiment) {
+                    console.log(`[Comments API] Sentiment analysis result: ${sentiment} for comment ${savedComment.id}`);
+                    await prisma.comment.update({
+                      where: { id: savedComment.id },
+                      data: { sentiment },
+                    });
+                  } else {
+                    console.warn(`[Comments API] Sentiment analysis returned null for comment ${savedComment.id}`);
+                  }
+                }
+                
                 newCommentsCount++;
               } else {
                 skippedCommentsCount++;
@@ -534,6 +551,7 @@ export async function GET(request: NextRequest) {
         authorName: comment.authorName,
         createdAt: comment.createdAt.toISOString(),
         status: comment.status,
+        sentiment: comment.sentiment,
         postId: comment.postId,
         postMessage: postMessages[comment.postId] || '',
         postImage: postImages[comment.postId] || undefined,
@@ -1005,7 +1023,7 @@ export async function GET(request: NextRequest) {
             
             if (shouldProcess) {
               // Store comment in database
-              await prisma.comment.upsert({
+              const savedComment = await prisma.comment.upsert({
                 where: {
                   pageId_commentId: {
                     pageId: connectedPage.id,
@@ -1027,6 +1045,21 @@ export async function GET(request: NextRequest) {
                   createdAt: commentCreatedAt,
                 },
               });
+
+              // Analyze sentiment if not already set
+              if (!savedComment.sentiment) {
+                console.log(`[Comments API] Analyzing sentiment for comment ${savedComment.id}`);
+                const sentiment = await analyzeCommentSentiment(commentMessage);
+                if (sentiment) {
+                  console.log(`[Comments API] Sentiment analysis result: ${sentiment} for comment ${savedComment.id}`);
+                  await prisma.comment.update({
+                    where: { id: savedComment.id },
+                    data: { sentiment },
+                  });
+                } else {
+                  console.warn(`[Comments API] Sentiment analysis returned null for comment ${savedComment.id}`);
+                }
+              }
 
               // Extract image URL from post
               let postImage: string | undefined;
@@ -1165,7 +1198,7 @@ export async function GET(request: NextRequest) {
                     const shouldProcess = !fetchSince || commentCreatedAt > fetchSince;
                     
                     if (shouldProcess) {
-                      await prisma.comment.upsert({
+                      const savedComment = await prisma.comment.upsert({
                         where: {
                           pageId_commentId: {
                             pageId: connectedPage.id,
@@ -1187,6 +1220,21 @@ export async function GET(request: NextRequest) {
                           createdAt: commentCreatedAt,
                         },
                       });
+
+                      // Analyze sentiment if not already set
+                      if (!savedComment.sentiment) {
+                        console.log(`[Comments API] Analyzing sentiment for comment ${savedComment.id}`);
+                        const sentiment = await analyzeCommentSentiment(commentMessage);
+                        if (sentiment) {
+                          console.log(`[Comments API] Sentiment analysis result: ${sentiment} for comment ${savedComment.id}`);
+                          await prisma.comment.update({
+                            where: { id: savedComment.id },
+                            data: { sentiment },
+                          });
+                        } else {
+                          console.warn(`[Comments API] Sentiment analysis returned null for comment ${savedComment.id}`);
+                        }
+                      }
 
                       // Extract image URL from post
                       let postImage: string | undefined;
@@ -1338,6 +1386,7 @@ export async function GET(request: NextRequest) {
       authorName: comment.authorName,
       createdAt: comment.createdAt.toISOString(),
       status: comment.status,
+      sentiment: comment.sentiment,
       postId: comment.postId,
       postMessage: postMessages[comment.postId] || '',
       postImage: postImages[comment.postId] || undefined,

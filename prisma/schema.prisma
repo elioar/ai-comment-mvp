@@ -88,6 +88,7 @@ model Comment {
   replied           Boolean       @default(false)
   replyMessage      String?
   status            String        @default("pending") // "pending", "replied", "ignored"
+  sentiment         String?       // AI-analyzed sentiment: "positive", "neutral", "negative"
 
   @@unique([pageId, commentId])
   @@index([pageId, status])
