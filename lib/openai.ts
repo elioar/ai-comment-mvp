@@ -35,8 +35,76 @@ export async function analyzeCommentSentiment(
     return null;
   }
 
+  const cleanText = text.trim().toLowerCase();
+
+  // Smart pre-filtering: Handle common cases without AI
+  // This saves API costs by using simple rules for obvious cases
+
+  // 1. Check if comment is emoji-only (no letters/numbers)
+  const hasOnlyEmojis = /^[\p{Emoji}\s]+$/u.test(text.trim()) && !/[a-zA-Z0-9]/.test(text);
+  if (hasOnlyEmojis) {
+    // Classify emojis by sentiment
+    const positiveEmojis = ['😊', '😄', '😃', '😁', '🥰', '😍', '❤️', '💕', '👍', '🙌', '🎉', '✨', '⭐', '💯', '🔥', '😎', '🤗', '💪', '👏', '🥳'];
+    const negativeEmojis = ['😢', '😭', '😞', '😔', '😩', '😠', '😡', '💔', '👎', '😤', '🤬', '😰', '😨', '😱', '🤮', '💩'];
+    
+    const hasPositive = positiveEmojis.some(emoji => text.includes(emoji));
+    const hasNegative = negativeEmojis.some(emoji => text.includes(emoji));
+    
+    if (hasPositive && !hasNegative) {
+      console.log('[Sentiment Analysis] Emoji-only comment detected: positive');
+      return 'positive';
+    }
+    if (hasNegative && !hasPositive) {
+      console.log('[Sentiment Analysis] Emoji-only comment detected: negative');
+      return 'negative';
+    }
+    // Mixed or neutral emojis
+    console.log('[Sentiment Analysis] Emoji-only comment detected: neutral');
+    return 'neutral';
+  }
+
+  // 2. Very short positive responses (English & Greek)
+  const shortPositive = [
+    'ok', 'okay', 'thanks', 'thank you', 'good', 'great', 'nice', 'cool', 'yes', 'yep', 'yeah', 
+    'perfect', 'awesome', 'love', 'loved it', 'amazing', 'excellent', 'fantastic', 'wow',
+    'ευχαριστώ', 'ευχαριστω', 'efharisto', 'efxaristo', 'kala', 'καλα', 'καλά', 'ωραια', 'ωραία', 
+    'wraia', 'οκ', 'ναι', 'nai', 'τέλειο', 'τελειο', 'teleio', 'bravo', 'μπράβο', 'μπραβο'
+  ];
+  if (cleanText.length <= 15 && shortPositive.some(word => cleanText === word || cleanText === word + '!' || cleanText === word + '!!')) {
+    console.log('[Sentiment Analysis] Short positive response detected:', cleanText);
+    return 'positive';
+  }
+
+  // 3. Very short negative responses (English & Greek)
+  const shortNegative = [
+    'no', 'nope', 'bad', 'terrible', 'awful', 'hate', 'worst', 'disappointed', 'horrible',
+    'όχι', 'oxi', 'οχι', 'κακό', 'κακο', 'kako', 'άσχημο', 'ασχημο', 'asxhmo'
+  ];
+  if (cleanText.length <= 15 && shortNegative.some(word => cleanText === word || cleanText === word + '!' || cleanText === word + '!!')) {
+    console.log('[Sentiment Analysis] Short negative response detected:', cleanText);
+    return 'negative';
+  }
+
+  // 4. Very short neutral responses
+  const shortNeutral = [
+    'ok', 'k', 'hmm', 'hm', 'eh', 'meh', 'maybe', 'idk', 'dunno', 'what', 'where', 'when', 
+    'how', 'why', 'who', 'which'
+  ];
+  if (cleanText.length <= 8 && shortNeutral.includes(cleanText)) {
+    console.log('[Sentiment Analysis] Short neutral response detected:', cleanText);
+    return 'neutral';
+  }
+
+  // 5. Question-only comments (usually neutral unless clearly positive/negative)
+  if (text.includes('?') && text.trim().split(/\s+/).length <= 8) {
+    console.log('[Sentiment Analysis] Short question detected: neutral');
+    return 'neutral';
+  }
+
+  // If none of the simple rules match, use AI for analysis
+  console.log('[Sentiment Analysis] Using AI for analysis:', cleanText.substring(0, 50) + '...');
+
   try {
-    console.log('[Sentiment Analysis] Analyzing comment:', text.substring(0, 50) + '...');
     const completion = await client.chat.completions.create({
       model: 'gpt-4o-mini', // Using GPT-4o-mini instead of GPT-5-mini due to reasoning token issues
       messages: [
@@ -91,18 +159,33 @@ export async function analyzeCommentSentiment(
   } catch (error: any) {
     // Log error but don't throw - we don't want sentiment analysis to block comment fetching
     if (error?.status === 429) {
-      console.warn('OpenAI API rate limit exceeded. Skipping sentiment analysis.');
+      console.error('❌ [OpenAI] RATE LIMIT EXCEEDED - Too many requests. Sentiment analysis paused temporarily.');
+      console.error('   → Solution: Wait a few minutes or upgrade your OpenAI plan for higher limits.');
     } else if (error?.status === 401) {
-      console.error('OpenAI API authentication failed. Check your API key.');
+      console.error('❌ [OpenAI] AUTHENTICATION FAILED - Invalid or expired API key.');
+      console.error('   → Solution: Check your OPENAI_API_KEY in .env file.');
     } else if (error?.status === 404) {
-      console.error('OpenAI API model not found. Check if the model name is correct:', error?.message || error);
+      console.error('❌ [OpenAI] MODEL NOT FOUND - The specified model is not available.');
+      console.error(`   → Model: ${error?.message || 'gpt-4o-mini'}`);
+      console.error('   → Solution: Check if model name is correct or if you have access to it.');
     } else if (error?.status === 500 || error?.status === 503) {
-      console.warn('OpenAI API server error. Skipping sentiment analysis.');
+      console.error('❌ [OpenAI] SERVER ERROR - OpenAI service is temporarily unavailable.');
+      console.error('   → This is an OpenAI issue, not your app. Try again in a few minutes.');
+    } else if (error?.status === 400) {
+      console.error('❌ [OpenAI] BAD REQUEST - Invalid parameters sent to API.');
+      console.error(`   → Error: ${error?.message || 'Unknown'}`);
+      if (error?.response) {
+        console.error('   → Details:', JSON.stringify(error.response, null, 2));
+      }
+    } else if (error?.code === 'ENOTFOUND' || error?.code === 'ECONNREFUSED') {
+      console.error('❌ [OpenAI] NETWORK ERROR - Cannot reach OpenAI servers.');
+      console.error('   → Check your internet connection.');
     } else {
-      console.error('Error analyzing comment sentiment:', error?.message || error);
+      console.error('❌ [OpenAI] UNEXPECTED ERROR:', error?.message || error);
+      console.error('   → This sentiment will be skipped. Comments will still be fetched.');
       // Log full error details for debugging
       if (error?.response) {
-        console.error('OpenAI API error details:', JSON.stringify(error.response, null, 2));
+        console.error('   → API Response:', JSON.stringify(error.response, null, 2));
       }
     }
     return null;

@@ -1462,9 +1462,31 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Error: Internal server error in comments route');
+    console.error('❌ [Facebook API] CRITICAL ERROR in comments route');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    if (error instanceof Error) {
+      console.error('   Error Type:', error.name);
+      console.error('   Error Message:', error.message);
+      console.error('   Stack Trace:', error.stack?.split('\n').slice(0, 3).join('\n'));
+    } else {
+      console.error('   Unknown Error:', error);
+    }
+    
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('🔍 Troubleshooting:');
+    console.error('   1. Check if Facebook/Instagram page is still connected');
+    console.error('   2. Verify FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET in .env');
+    console.error('   3. Check if page access tokens are still valid');
+    console.error('   4. Review Facebook API status: https://developers.facebook.com/status');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        message: 'Failed to fetch comments. Please try again or check your page connection.',
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     );
   }
