@@ -43,7 +43,7 @@ export async function analyzeCommentSentiment(
         {
           role: 'system',
           content:
-            'You are a sentiment analyzer. Classify the following comment as positive, neutral, or negative. Reply with ONLY one word: positive, neutral, or negative. Do not include any punctuation or additional text.',
+            'You are a sentiment analyzer. Classify the following comment as positive, neutral, or negative. IMPORTANT: If the comment appears to be written in Greeklish (Greek words using Latin/English letters), first interpret it as Greek before analyzing sentiment. Reply with ONLY one word: positive, neutral, or negative. Do not include any punctuation or additional text.',
         },
         {
           role: 'user',
@@ -57,7 +57,7 @@ export async function analyzeCommentSentiment(
     console.log('[Sentiment Analysis] Full completion object:', JSON.stringify(completion, null, 2));
     console.log('[Sentiment Analysis] Choices:', completion.choices);
     console.log('[Sentiment Analysis] First choice:', completion.choices[0]);
-    
+
     const response = completion.choices[0]?.message?.content
       ?.trim()
       .toLowerCase();
