@@ -1186,6 +1186,37 @@ function CommentsPageContent() {
                         {comments.filter(c => c.status === 'replied').length} {t('dashboard.comments.replied')}
                       </span>
                     </div>
+                    
+                    {/* Sentiment Stats - Only show if at least one comment has sentiment */}
+                    {comments.some(c => c.sentiment) && (
+                      <>
+                        <div className="w-px h-4 bg-gray-300 dark:bg-gray-700"></div>
+                        
+                        <div className="flex items-center gap-1.5 sm:gap-2 text-green-600 dark:text-green-400">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                          </svg>
+                          <span className="font-medium">{comments.filter(c => c.sentiment === 'positive').length}</span>
+                          <span className="hidden md:inline">positive</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 sm:gap-2 text-gray-500 dark:text-gray-400">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                          </svg>
+                          <span className="font-medium">{comments.filter(c => c.sentiment === 'neutral').length}</span>
+                          <span className="hidden md:inline">neutral</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 sm:gap-2 text-red-600 dark:text-red-400">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M15.73 3H8.27L3 8.27v7.46L8.27 21h7.46L21 15.73V8.27L15.73 3zM12 17.3c-.72 0-1.3-.58-1.3-1.3 0-.72.58-1.3 1.3-1.3.72 0 1.3.58 1.3 1.3 0 .72-.58 1.3-1.3 1.3zm1-4.3h-2V7h2v6z"/>
+                          </svg>
+                          <span className="font-medium">{comments.filter(c => c.sentiment === 'negative').length}</span>
+                          <span className="hidden md:inline">negative</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                   {selectedCommentIds.length > 0 && (
                     <div className="flex items-center gap-2 sm:gap-3">
@@ -1416,11 +1447,14 @@ function CommentsPageContent() {
               <div className="space-y-2 sm:space-y-3">
                 {comments.map((comment) => {
                   const isSelected = selectedCommentIds.includes(comment.id);
+                  const isHidden = comment.status === 'ignored';
                   return (
                     <div
                       key={comment.id}
                       className={`group relative bg-white/40 dark:bg-gray-900/30 backdrop-blur-xl rounded-2xl sm:rounded-3xl border transition-all duration-200 ${
-                        isSelected
+                        isHidden
+                          ? 'opacity-50 blur-[0.5px] hover:opacity-70 hover:blur-none border-gray-300/40 dark:border-gray-700/40'
+                          : isSelected
                           ? 'border-blue-500/30 dark:border-blue-500/30 ring-2 ring-blue-500/20 dark:ring-blue-500/10 shadow-xl'
                           : 'border-white/20 dark:border-gray-800/30 hover:border-white/30 dark:hover:border-gray-700/40 hover:shadow-lg'
                       }`}
