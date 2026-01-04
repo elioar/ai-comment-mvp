@@ -81,7 +81,7 @@ export const authOptions = {
             clientSecret: process.env.FACEBOOK_CLIENT_SECRET!,
             authorization: {
               params: {
-                scope: 'pages_read_engagement pages_manage_engagement pages_show_list pages_manage_posts instagram_basic instagram_manage_comments business_management',
+                scope: 'pages_read_engagement pages_manage_engagement pages_show_list pages_manage_posts instagram_basic instagram_manage_comments business_management ads_read',
               },
             },
           }),

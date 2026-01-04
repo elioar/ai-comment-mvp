@@ -6,6 +6,205 @@ import { analyzeCommentSentiment } from '@/lib/openai';
 
 const { auth } = NextAuth(authOptions);
 
+// Helper function to fetch ads and their comments
+async function fetchAdsComments(
+  connectedPageId: string,
+  adAccountId: string,
+  pageAccessToken: string,
+  fetchSince: Date | null,
+  userId: string,
+  isInstagram: boolean
+): Promise<{ newCommentsCount: number; totalCommentsFetched: number }> {
+  let newCommentsCount = 0;
+  let totalCommentsFetched = 0;
+
+  try {
+    console.log(`${isInstagram ? 'Instagram' : 'Facebook'} Ads: Fetching ads from account ${adAccountId}`);
+
+    // Marketing API (ads list) generally requires a USER access token with ads_read.
+    const account = await prisma.account.findFirst({
+      where: {
+        userId,
+        provider: 'facebook',
+      },
+      select: {
+        access_token: true,
+      },
+    });
+
+    const marketingAccessToken = account?.access_token;
+    if (!marketingAccessToken) {
+      console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Ads Error: No user access token found for Marketing API`);
+      return { newCommentsCount, totalCommentsFetched };
+    }
+    
+    // Normalize ad account id (people often paste "act_123...", while our code adds "act_" itself)
+    const normalizedAdAccountId = String(adAccountId || '').trim().replace(/^act_/i, '');
+    if (!normalizedAdAccountId) {
+      console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Ads Error: Invalid adAccountId`);
+      return { newCommentsCount, totalCommentsFetched };
+    }
+
+    // Fetch ads from the ad account
+    // Ads comments are comments on the post/media behind the ad.
+    // Facebook: creative.effective_object_story_id (fallback: creative.object_story_id) => /{post_id}/comments
+    // Instagram: effective_instagram_media_id (Marketing API) => /{ig_media_id}/comments
+    const adsFields = isInstagram
+      ? 'id,name,effective_instagram_media_id,status'
+      : 'id,name,creative{effective_object_story_id,object_story_id},status';
+
+    const filtering = encodeURIComponent(
+      JSON.stringify([{ field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] }])
+    );
+    const adsUrl = `https://graph.facebook.com/v24.0/act_${normalizedAdAccountId}/ads?access_token=${marketingAccessToken}&fields=${encodeURIComponent(adsFields)}&limit=50&filtering=${filtering}`;
+    
+    const adsResponse = await fetch(adsUrl);
+    
+    if (!adsResponse.ok) {
+      const errorText = await adsResponse.text();
+      console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Ads Error: Failed to fetch ads - ${errorText}`);
+      return { newCommentsCount, totalCommentsFetched };
+    }
+    
+    const adsData = await adsResponse.json();
+    const ads = adsData.data || [];
+    
+    console.log(`${isInstagram ? 'Instagram' : 'Facebook'} Ads: Found ${ads.length} ads`);
+    
+    // Process ads in batches
+    const batchSize = 5;
+    for (let i = 0; i < ads.length; i += batchSize) {
+      const batch = ads.slice(i, i + batchSize);
+      
+      const commentFetchPromises = batch.map(async (ad: any) => {
+        try {
+          let targetId: string | undefined;
+
+          if (isInstagram) {
+            targetId = ad.effective_instagram_media_id || ad.creative?.effective_instagram_media_id;
+          } else {
+            targetId = ad.creative?.effective_object_story_id || ad.creative?.object_story_id;
+          }
+          
+          if (!targetId) {
+            // This ad doesn't have a post/media we can fetch comments from
+            return { ad, comments: [], error: null };
+          }
+          
+          // Fetch comments for this ad's post/media (comments are on the underlying object, not a separate "ads comments" API)
+          const commentFields = isInstagram ? 'id,text,username,timestamp' : 'id,message,from,created_time';
+          let commentsUrl = `https://graph.facebook.com/v24.0/${targetId}/comments?access_token=${pageAccessToken}&fields=${commentFields}&limit=50`;
+          
+          if (fetchSince) {
+            const sinceTimestamp = Math.floor(fetchSince.getTime() / 1000);
+            commentsUrl += `&since=${sinceTimestamp}`;
+          }
+          
+          const commentsResponse = await fetch(commentsUrl);
+          
+          if (!commentsResponse.ok) {
+            return { ad, comments: [], error: await commentsResponse.text() };
+          }
+          
+          const commentsData = await commentsResponse.json();
+          return { ad, comments: commentsData.data || [], error: null };
+        } catch (error) {
+          return { ad, comments: [], error };
+        }
+      });
+      
+      const batchResults = await Promise.all(commentFetchPromises);
+      
+      // Process comments from ads
+      for (const { ad, comments, error } of batchResults) {
+        if (error) {
+          console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Ads: Error fetching comments for ad ${ad.id}:`, error);
+          continue;
+        }
+        
+        totalCommentsFetched += comments.length;
+        
+        for (const comment of comments) {
+          // Instagram and Facebook have different field names
+          let commentCreatedAt: Date;
+          let commentMessage: string;
+          let authorName: string;
+          let authorId: string;
+
+          if (isInstagram) {
+            commentCreatedAt = new Date(comment.timestamp);
+            commentMessage = comment.text || '';
+            authorName = comment.username || 'Unknown';
+            authorId = comment.id || '';
+          } else {
+            commentCreatedAt = new Date(comment.created_time);
+            commentMessage = comment.message || '';
+            authorName = comment.from?.name || 'Unknown';
+            authorId = comment.from?.id || '';
+          }
+          
+          const shouldProcess = !fetchSince || commentCreatedAt > fetchSince;
+          
+          if (shouldProcess) {
+            const postId = isInstagram
+              ? (ad.effective_instagram_media_id || ad.creative?.effective_instagram_media_id || '')
+              : (ad.creative?.effective_object_story_id || ad.creative?.object_story_id || '');
+            
+            const savedComment = await prisma.comment.upsert({
+              where: {
+                pageId_commentId: {
+                  pageId: connectedPageId,
+                  commentId: comment.id,
+                },
+              },
+              update: {
+                message: commentMessage,
+                authorName: authorName,
+                authorId: authorId,
+                isFromAd: true,
+                adId: ad.id,
+                adName: ad.name,
+              },
+              create: {
+                pageId: connectedPageId,
+                commentId: comment.id,
+                postId: postId,
+                message: commentMessage,
+                authorName: authorName,
+                authorId: authorId,
+                createdAt: commentCreatedAt,
+                isFromAd: true,
+                adId: ad.id,
+                adName: ad.name,
+              },
+            });
+            
+            // Analyze sentiment if not already set
+            if (!savedComment.sentiment) {
+              console.log(`[Ads API] Analyzing sentiment for ad comment ${savedComment.id}`);
+              const sentiment = await analyzeCommentSentiment(commentMessage);
+              if (sentiment) {
+                await prisma.comment.update({
+                  where: { id: savedComment.id },
+                  data: { sentiment },
+                });
+              }
+            }
+            
+            newCommentsCount++;
+          }
+        }
+      }
+    }
+    
+    console.log(`${isInstagram ? 'Instagram' : 'Facebook'} Ads: ${totalCommentsFetched} total comments, ${newCommentsCount} new`);
+  } catch (error) {
+    console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Ads Error: Exception during ads fetch:`, error);
+  }
+  
+  return { newCommentsCount, totalCommentsFetched };
+}
+
 // Background function to fetch comments from Facebook/Instagram API
 async function fetchCommentsInBackground(
   pageId: string,
@@ -424,6 +623,32 @@ async function fetchCommentsInBackground(
 
     console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: ${totalCommentsFetched} total comments, ${newCommentsCount} new, ${skippedCommentsCount} skipped`);
 
+    // Fetch comments from ads (Facebook + Instagram)
+    // Ads comments are comments on the post/media behind the ad.
+    const connectedPageForAds = await prisma.connectedPage.findUnique({
+      where: { id: connectedPageId },
+      select: { adAccountId: true },
+    });
+
+    if (connectedPageForAds?.adAccountId) {
+      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Fetching ad comments for ad account ${connectedPageForAds.adAccountId}`);
+      const adsResult = await fetchAdsComments(
+        connectedPageId,
+        connectedPageForAds.adAccountId,
+        pageAccessToken,
+        fetchSince,
+        userId,
+        isInstagram
+      );
+
+      newCommentsCount += adsResult.newCommentsCount;
+      totalCommentsFetched += adsResult.totalCommentsFetched;
+
+      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Total with ads: ${totalCommentsFetched} comments, ${newCommentsCount} new`);
+    } else {
+      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: No ad account ID configured, skipping ad comments`);
+    }
+
     // Update lastCommentsFetchedAt after successful comment fetch
     if (commentsFetchSuccess) {
       await prisma.connectedPage.update({
@@ -441,8 +666,15 @@ async function fetchCommentsInBackground(
 }
 
 export async function GET(request: NextRequest) {
+  const performanceStart = Date.now();
+  console.log('\n🚀 ═══════════════════════════════════════════════════════');
+  console.log('📊 [PERFORMANCE] Comment Fetch Request Started');
+  console.log('═══════════════════════════════════════════════════════');
+  
   try {
+    const authStart = Date.now();
     const session = await auth();
+    console.log(`⏱️  [METRIC] Auth check: ${Date.now() - authStart}ms`);
     
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -451,6 +683,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const pageId = searchParams.get('pageId');
     const background = searchParams.get('background') === 'true';
+    console.log(`🔧 [CONFIG] PageID: ${pageId}, Background: ${background}`);
 
     if (!pageId) {
       return NextResponse.json(
@@ -460,12 +693,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get connected page
+    const dbQueryStart = Date.now();
     const connectedPage = await prisma.connectedPage.findFirst({
       where: {
         userId: session.user.id,
         pageId,
       },
     });
+    console.log(`⏱️  [METRIC] DB Query (ConnectedPage): ${Date.now() - dbQueryStart}ms`);
 
     if (!connectedPage) {
       return NextResponse.json(
@@ -489,6 +724,8 @@ export async function GET(request: NextRequest) {
     
     // If background mode, return cached comments immediately and start background fetch
     if (background) {
+      console.log('🔄 [MODE] Background fetch mode - returning cached data');
+      const cacheStart = Date.now();
       // Get cached comments from database
       const storedComments = await prisma.comment.findMany({
         where: {
@@ -507,6 +744,8 @@ export async function GET(request: NextRequest) {
         },
         take: 100,
       });
+      console.log(`⏱️  [METRIC] DB Query (Cached Comments): ${Date.now() - cacheStart}ms`);
+      console.log(`📦 [DATA] Loaded ${storedComments.length} cached comments`);
 
       // Fetch post messages, images, and dates for cached comments
       const postIds = [...new Set(storedComments.map(c => c.postId))];
@@ -514,7 +753,9 @@ export async function GET(request: NextRequest) {
       const postImages: Record<string, string> = {};
       const postCreatedAts: Record<string, string> = {};
       
+      console.log(`📋 [DATA] Fetching metadata for ${postIds.length} unique posts`);
       // Try to fetch post data (optional - don't fail if this doesn't work)
+      const postMetadataStart = Date.now();
       const currentPageAccessToken = connectedPage.pageAccessToken;
       if (currentPageAccessToken) {
         for (const postId of postIds.slice(0, 20)) {
@@ -542,6 +783,7 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+      console.log(`⏱️  [METRIC] Post metadata fetch: ${Date.now() - postMetadataStart}ms`);
 
       // Format cached comments
       const formattedComments = storedComments.map(comment => ({
@@ -558,6 +800,9 @@ export async function GET(request: NextRequest) {
         postCreatedAt: postCreatedAts[comment.postId] || undefined,
         pageName: comment.connectedPage.pageName,
         provider: comment.connectedPage.provider,
+        isFromAd: comment.isFromAd,
+        adId: comment.adId,
+        adName: comment.adName,
       }));
 
       // Start background fetch without awaiting
@@ -582,6 +827,11 @@ export async function GET(request: NextRequest) {
       }
 
       // Return cached comments immediately
+      const totalTime = Date.now() - performanceStart;
+      console.log('✅ [COMPLETE] Background mode response ready');
+      console.log(`⏱️  [METRIC] Total Request Time: ${totalTime}ms`);
+      console.log('═══════════════════════════════════════════════════════\n');
+      
       return NextResponse.json({
         comments: formattedComments,
         newCommentsCount: 0,
@@ -591,6 +841,9 @@ export async function GET(request: NextRequest) {
         backgroundFetching: true,
       });
     }
+    
+    console.log('🔥 [MODE] Manual refresh mode - fetching fresh data');
+    const manualFetchStart = Date.now();
     
     console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Fetching comments for ${connectedPage.pageName || pageId}`);
     
@@ -808,6 +1061,9 @@ export async function GET(request: NextRequest) {
     let hasErrorCode10 = false; // Track if we encountered Facebook error code 10
     let tokenRefreshedOnce = false; // Track if we already refreshed token once (to avoid multiple refreshes)
     
+    console.log(`📡 [API] Fetching ${isInstagram ? 'media' : 'posts'} from Meta API...`);
+    const postsFetchStart = Date.now();
+    
     try {
       let postsUrl: string;
       
@@ -826,7 +1082,9 @@ export async function GET(request: NextRequest) {
         const postsData = await postsResponse.json();
         posts = postsData.data || [];
         postsFetchSuccess = true;
-        console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Found ${posts.length} ${isInstagram ? 'media' : 'posts'}`);
+        const postsFetchTime = Date.now() - postsFetchStart;
+        console.log(`✅ [API] Found ${posts.length} ${isInstagram ? 'media' : 'posts'}`);
+        console.log(`⏱️  [METRIC] Posts fetch: ${postsFetchTime}ms`);
       } else {
         const errorText = await postsResponse.text();
         postsError = errorText;
@@ -941,16 +1199,24 @@ export async function GET(request: NextRequest) {
     let totalCommentsFetched = 0;
     let skippedCommentsCount = 0;
     let commentsErrors: string[] = [];
+    let sentimentAnalysisCount = 0;
+    let sentimentAnalysisTime = 0;
     
     if (posts.length > 0) {
-      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Processing ${posts.length} ${isInstagram ? 'media' : 'posts'} for comments`);
+      console.log(`📋 [DATA] Processing ${posts.length} ${isInstagram ? 'media' : 'posts'} for comments`);
     }
+    
+    const commentsFetchStart = Date.now();
     
     // Fetch comments for all posts in parallel for better performance
     // Process in batches to avoid overwhelming the API
     const batchSize = 10; // Increased from 5 to 10 for better performance
+    console.log(`⚙️  [CONFIG] Batch size: ${batchSize} posts per batch`);
+    
     for (let i = 0; i < posts.length; i += batchSize) {
+      const batchStart = Date.now();
       const batch = posts.slice(i, i + batchSize);
+      console.log(`📦 [BATCH ${Math.floor(i / batchSize) + 1}] Processing posts ${i + 1}-${Math.min(i + batchSize, posts.length)}`);
       
       const commentFetchPromises = batch.map(async (post) => {
         try {
@@ -1048,16 +1314,21 @@ export async function GET(request: NextRequest) {
 
               // Analyze sentiment if not already set
               if (!savedComment.sentiment) {
-                console.log(`[Comments API] Analyzing sentiment for comment ${savedComment.id}`);
+                const sentimentStart = Date.now();
+                console.log(`🤖 [AI] Analyzing sentiment for comment ${savedComment.id}`);
                 const sentiment = await analyzeCommentSentiment(commentMessage);
+                const sentimentTime = Date.now() - sentimentStart;
+                sentimentAnalysisTime += sentimentTime;
+                sentimentAnalysisCount++;
+                
                 if (sentiment) {
-                  console.log(`[Comments API] Sentiment analysis result: ${sentiment} for comment ${savedComment.id}`);
+                  console.log(`✅ [AI] Sentiment: ${sentiment} (${sentimentTime}ms)`);
                   await prisma.comment.update({
                     where: { id: savedComment.id },
                     data: { sentiment },
                   });
                 } else {
-                  console.warn(`[Comments API] Sentiment analysis returned null for comment ${savedComment.id}`);
+                  console.warn(`⚠️  [AI] Sentiment analysis returned null for comment ${savedComment.id}`);
                 }
               }
 
@@ -1223,16 +1494,21 @@ export async function GET(request: NextRequest) {
 
                       // Analyze sentiment if not already set
                       if (!savedComment.sentiment) {
-                        console.log(`[Comments API] Analyzing sentiment for comment ${savedComment.id}`);
+                        const sentimentStart = Date.now();
+                        console.log(`🤖 [AI] Analyzing sentiment for comment ${savedComment.id}`);
                         const sentiment = await analyzeCommentSentiment(commentMessage);
+                        const sentimentTime = Date.now() - sentimentStart;
+                        sentimentAnalysisTime += sentimentTime;
+                        sentimentAnalysisCount++;
+                        
                         if (sentiment) {
-                          console.log(`[Comments API] Sentiment analysis result: ${sentiment} for comment ${savedComment.id}`);
+                          console.log(`✅ [AI] Sentiment: ${sentiment} (${sentimentTime}ms)`);
                           await prisma.comment.update({
                             where: { id: savedComment.id },
                             data: { sentiment },
                           });
                         } else {
-                          console.warn(`[Comments API] Sentiment analysis returned null for comment ${savedComment.id}`);
+                          console.warn(`⚠️  [AI] Sentiment analysis returned null for comment ${savedComment.id}`);
                         }
                       }
 
@@ -1289,9 +1565,49 @@ export async function GET(request: NextRequest) {
           // Silent fail - continue with next post
         }
       }
+      
+      const batchTime = Date.now() - batchStart;
+      console.log(`⏱️  [METRIC] Batch ${Math.floor(i / batchSize) + 1} completed in ${batchTime}ms`);
     }
 
+    const totalCommentsFetchTime = Date.now() - commentsFetchStart;
+    console.log(`✅ [COMPLETE] Comments processing finished`);
+    console.log(`⏱️  [METRIC] Total comments fetch: ${totalCommentsFetchTime}ms`);
+    console.log(`📊 [STATS] ${totalCommentsFetched} total, ${newCommentsCount} new, ${skippedCommentsCount} skipped`);
+    
+    if (sentimentAnalysisCount > 0) {
+      const avgSentimentTime = Math.round(sentimentAnalysisTime / sentimentAnalysisCount);
+      console.log(`🤖 [AI STATS] ${sentimentAnalysisCount} sentiment analyses, avg ${avgSentimentTime}ms per comment`);
+      console.log(`⏱️  [METRIC] Total AI time: ${sentimentAnalysisTime}ms`);
+    }
+    
     console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: ${totalCommentsFetched} total comments, ${newCommentsCount} new, ${skippedCommentsCount} skipped`);
+
+    // Fetch comments from ads (Facebook + Instagram)
+    // Ads comments are comments on the post/media behind the ad.
+    const connectedPageForAds = await prisma.connectedPage.findUnique({
+      where: { id: connectedPage.id },
+      select: { adAccountId: true },
+    });
+
+    if (connectedPageForAds?.adAccountId) {
+      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Fetching ad comments for ad account ${connectedPageForAds.adAccountId}`);
+      const adsResult = await fetchAdsComments(
+        connectedPage.id,
+        connectedPageForAds.adAccountId,
+        currentPageAccessToken,
+        fetchSince,
+        session.user.id,
+        isInstagram
+      );
+
+      newCommentsCount += adsResult.newCommentsCount;
+      totalCommentsFetched += adsResult.totalCommentsFetched;
+
+      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Total with ads: ${totalCommentsFetched} comments, ${newCommentsCount} new`);
+    } else {
+      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: No ad account ID configured, skipping ad comments`);
+    }
 
     // Update lastCommentsFetchedAt after successful comment fetch
     if (commentsFetchSuccess) {
@@ -1327,6 +1643,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get stored comments from database with page information
+    const dbFinalQueryStart = Date.now();
     const storedComments = await prisma.comment.findMany({
       where: {
         pageId: connectedPage.id,
@@ -1344,6 +1661,8 @@ export async function GET(request: NextRequest) {
       },
       take: 100,
     });
+    console.log(`⏱️  [METRIC] Final DB query: ${Date.now() - dbFinalQueryStart}ms`);
+    console.log(`📦 [DATA] Retrieved ${storedComments.length} comments from database`);
 
     // Fetch post messages, images, and dates for all unique post IDs
     const postIds = [...new Set(storedComments.map(c => c.postId))];
@@ -1351,6 +1670,8 @@ export async function GET(request: NextRequest) {
     const postImages: Record<string, string> = {};
     const postCreatedAts: Record<string, string> = {};
     
+    console.log(`📋 [DATA] Fetching metadata for ${postIds.length} unique posts (limit 20)`);
+    const postMetaFetchStart = Date.now();
     // Try to fetch post data (optional - don't fail if this doesn't work)
     for (const postId of postIds.slice(0, 20)) { // Limit to 20 to avoid too many API calls
       try {
@@ -1377,6 +1698,7 @@ export async function GET(request: NextRequest) {
         // Silently fail - post data is optional
       }
     }
+    console.log(`⏱️  [METRIC] Post metadata fetch: ${Date.now() - postMetaFetchStart}ms`);
 
     // Format comments with page and post information
     const formattedComments = storedComments.map(comment => ({
@@ -1393,6 +1715,9 @@ export async function GET(request: NextRequest) {
       postCreatedAt: postCreatedAts[comment.postId] || undefined,
       pageName: comment.connectedPage.pageName,
       provider: comment.connectedPage.provider,
+      isFromAd: comment.isFromAd,
+      adId: comment.adId,
+      adName: comment.adName,
     }));
 
     // Check for Facebook error code 10 and return specific response
@@ -1459,6 +1784,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Response logged above
+
+    const totalRequestTime = Date.now() - performanceStart;
+    const manualFetchTime = Date.now() - manualFetchStart;
+    
+    console.log('\n📊 ═══════════════════════════════════════════════════════');
+    console.log('📈 [PERFORMANCE SUMMARY]');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log(`⏱️  Total Request Time: ${totalRequestTime}ms`);
+    console.log(`⏱️  Manual Fetch Time: ${manualFetchTime}ms`);
+    console.log(`📡 API Calls: Posts + Comments + ${postIds.slice(0, 20).length} Post Metadata`);
+    console.log(`💾 Database Operations: ${storedComments.length} comments retrieved`);
+    if (sentimentAnalysisCount > 0) {
+      console.log(`🤖 AI Analysis: ${sentimentAnalysisCount} comments (${sentimentAnalysisTime}ms total)`);
+    }
+    console.log(`📦 Result: ${formattedComments.length} comments, ${newCommentsCount} new`);
+    console.log('═══════════════════════════════════════════════════════\n');
 
     return NextResponse.json(response);
   } catch (error) {

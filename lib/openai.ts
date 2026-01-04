@@ -102,7 +102,9 @@ export async function analyzeCommentSentiment(
   }
 
   // If none of the simple rules match, use AI for analysis
-  console.log('[Sentiment Analysis] Using AI for analysis:', cleanText.substring(0, 50) + '...');
+  const previewText = cleanText.substring(0, 50) + (cleanText.length > 50 ? '...' : '');
+  console.log(`🤖 [AI] Using OpenAI API for: "${previewText}"`);
+  const aiStart = Date.now();
 
   try {
     const completion = await client.chat.completions.create({
@@ -122,20 +124,18 @@ export async function analyzeCommentSentiment(
       max_tokens: 10, // GPT-4o-mini uses max_tokens (not max_completion_tokens)
     });
 
-    console.log('[Sentiment Analysis] Full completion object:', JSON.stringify(completion, null, 2));
-    console.log('[Sentiment Analysis] Choices:', completion.choices);
-    console.log('[Sentiment Analysis] First choice:', completion.choices[0]);
+    const aiTime = Date.now() - aiStart;
+    console.log(`⏱️  [AI] OpenAI API response received in ${aiTime}ms`);
+    console.log(`📊 [AI] Tokens used: ${completion.usage?.total_tokens || 'N/A'}`);
 
     const response = completion.choices[0]?.message?.content
       ?.trim()
       .toLowerCase();
 
-    console.log('[Sentiment Analysis] Raw response:', response);
-    console.log('[Sentiment Analysis] Response type:', typeof response);
-    console.log('[Sentiment Analysis] Response length:', response?.length);
+    console.log(`🔍 [AI] Raw response: "${response}"`);
 
     if (!response) {
-      console.warn('[Sentiment Analysis] Empty sentiment response from OpenAI');
+      console.warn('⚠️  [AI] Empty sentiment response from OpenAI');
       return null;
     }
 
@@ -150,13 +150,16 @@ export async function analyzeCommentSentiment(
       sentiment === 'neutral' ||
       sentiment === 'negative'
     ) {
-      console.log('[Sentiment Analysis] Success! Sentiment:', sentiment);
+      console.log(`✅ [AI] Successfully classified as: ${sentiment}`);
       return sentiment;
     }
 
-    console.warn(`[Sentiment Analysis] Unexpected sentiment response: ${response}`);
+    console.warn(`⚠️  [AI] Unexpected sentiment response: ${response}`);
     return null;
   } catch (error: any) {
+    const aiTime = Date.now() - aiStart;
+    console.error(`❌ [AI] OpenAI API call failed after ${aiTime}ms`);
+    
     // Log error but don't throw - we don't want sentiment analysis to block comment fetching
     if (error?.status === 429) {
       console.error('❌ [OpenAI] RATE LIMIT EXCEEDED - Too many requests. Sentiment analysis paused temporarily.');

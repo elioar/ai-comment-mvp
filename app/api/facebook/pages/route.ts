@@ -514,8 +514,75 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Try to automatically detect ad account ID for Facebook pages
+    let adAccountId: string | null = null;
+    if (provider === 'facebook') {
+      try {
+        const account = await prisma.account.findFirst({
+          where: {
+            userId: session.user.id,
+            provider: 'facebook',
+          },
+          select: {
+            access_token: true,
+          },
+        });
+
+        if (account?.access_token) {
+          // Try to fetch ad accounts associated with the user
+          // Use /me/adaccounts endpoint to get ad accounts the user has access to
+          const adAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${account.access_token}&fields=id,account_id,name&limit=25`;
+          const adAccountsResponse = await fetch(adAccountsUrl);
+          
+          if (adAccountsResponse.ok) {
+            const adAccountsData = await adAccountsResponse.json();
+            const adAccounts = adAccountsData.data || [];
+            
+            if (adAccounts.length > 0) {
+              // Use the first ad account (users can manually change this later if needed)
+              // The account_id field contains just the numeric ID (without 'act_' prefix)
+              adAccountId = adAccounts[0].account_id || adAccounts[0].id?.replace(/^act_/i, '') || null;
+              console.log(`Auto-detected ad account ID: ${adAccountId} for page ${pageId}`);
+            }
+          } else {
+            // Silently fail - ad account detection is optional
+            const errorText = await adAccountsResponse.text();
+            console.log(`Could not auto-detect ad account (this is optional): ${errorText.substring(0, 200)}`);
+          }
+        }
+      } catch (error) {
+        // Silently fail - ad account detection is optional
+        console.log(`Error auto-detecting ad account (this is optional):`, error);
+      }
+    }
+
     // Store connected page
     try {
+      // Check if page already exists to decide whether to update adAccountId
+      const existingPage = await prisma.connectedPage.findUnique({
+        where: {
+          userId_pageId_provider: {
+            userId: session.user.id,
+            pageId,
+            provider,
+          },
+        },
+        select: { adAccountId: true },
+      });
+
+      const updateData: any = {
+        pageName,
+        pageAccessToken: finalPageAccessToken,
+        updatedAt: new Date(),
+      };
+
+      // Only set adAccountId on create, or update if not already set
+      if (!existingPage || !existingPage.adAccountId) {
+        if (adAccountId) {
+          updateData.adAccountId = adAccountId;
+        }
+      }
+
       const connectedPage = await prisma.connectedPage.upsert({
         where: {
           userId_pageId_provider: {
@@ -524,16 +591,13 @@ export async function POST(request: NextRequest) {
             provider,
           },
         },
-        update: {
-          pageName,
-          pageAccessToken: finalPageAccessToken,
-          updatedAt: new Date(),
-        },
+        update: updateData,
         create: {
           userId: session.user.id,
           pageId,
           pageName,
           pageAccessToken: finalPageAccessToken,
+          adAccountId,
           provider,
         },
       });

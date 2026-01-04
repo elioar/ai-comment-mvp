@@ -64,6 +64,7 @@ model ConnectedPage {
   pageId                String    // Facebook Page ID
   pageName              String
   pageAccessToken       String    // Long-lived access token for the page
+  adAccountId           String?   // Facebook Ad Account ID (optional, for fetching ad comments)
   provider              String    @default("facebook") // "facebook" or "instagram"
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -79,7 +80,7 @@ model Comment {
   pageId            String        // Reference to ConnectedPage
   connectedPage     ConnectedPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
   commentId         String        // Facebook comment ID
-  postId            String        // Facebook post ID
+  postId            String        // Facebook post ID or Ad ID
   message           String
   authorName        String
   authorId          String
@@ -89,7 +90,11 @@ model Comment {
   replyMessage      String?
   status            String        @default("pending") // "pending", "replied", "ignored"
   sentiment         String?       // AI-analyzed sentiment: "positive", "neutral", "negative"
+  isFromAd          Boolean       @default(false) // Whether this comment is from an ad
+  adId              String?       // Facebook Ad ID (if comment is from an ad)
+  adName            String?       // Ad name for display purposes
 
   @@unique([pageId, commentId])
   @@index([pageId, status])
+  @@index([pageId, isFromAd])
 }
