@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
         provider: true,
         createdAt: true,
         pageAccessToken: true, // Include to compare with fresh tokens
+        adAccountId: true, // Include ad account ID
       },
     });
 
@@ -533,33 +534,61 @@ export async function POST(request: NextRequest) {
         if (account?.access_token) {
           console.log(`[Ad Account Detection] Found Facebook account token, fetching ad accounts for page ${pageId}...`);
           
-          // Strategy 1: Try to get ad accounts directly from the page (business portfolio ad accounts)
-          // This gets ad accounts associated with the page's business portfolio
-          console.log(`[Ad Account Detection] Strategy 1: Trying to fetch ad accounts from page ${pageId} using user token...`);
-          const pageAdAccountsUrl = `https://graph.facebook.com/v24.0/${pageId}/adaccounts?access_token=${account.access_token}&fields=id,account_id,name&limit=25`;
-          const pageAdAccountsResponse = await fetch(pageAdAccountsUrl);
+          // Priority Strategy: Always use the specific ad account "Elyon Mon IKE"
+          const targetBusinessName = 'Elyon Mon IKE';
+          const targetAdAccountId = 'act_269316045245432';
           
-          let foundAdAccounts = false;
+          console.log(`[Ad Account Detection] Priority Strategy: Looking for ad account "${targetBusinessName}" (ID: ${targetAdAccountId})...`);
+          const priorityAdAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${account.access_token}&fields=id,account_id,name,business_name&limit=100`;
+          const priorityAdAccountsResponse = await fetch(priorityAdAccountsUrl);
           
-          if (pageAdAccountsResponse.ok) {
-            const pageAdAccountsData = await pageAdAccountsResponse.json();
-            const pageAdAccounts = pageAdAccountsData.data || [];
+          if (priorityAdAccountsResponse.ok) {
+            const priorityAdAccountsData = await priorityAdAccountsResponse.json();
+            const priorityAdAccounts = priorityAdAccountsData.data || [];
             
-            if (pageAdAccounts.length > 0) {
-              // Use the ad account from the page's business portfolio
-              adAccountId = pageAdAccounts[0].account_id || pageAdAccounts[0].id?.replace(/^act_/i, '') || null;
-              console.log(`✅ [Ad Account Detection] Found ${pageAdAccounts.length} ad account(s) from page's business portfolio`);
-              console.log(`✅ [Ad Account Detection] Using ad account: "${pageAdAccounts[0].name || adAccountId}" (ID: ${adAccountId})`);
-              foundAdAccounts = true;
+            // Find the specific ad account by business_name or id
+            const targetAccount = priorityAdAccounts.find((acc: any) => 
+              acc.business_name === targetBusinessName || acc.id === targetAdAccountId
+            );
+            
+            if (targetAccount) {
+              adAccountId = targetAccount.account_id || targetAccount.id?.replace(/^act_/i, '') || null;
+              console.log(`✅ [Ad Account Detection] Found target ad account: "${targetAccount.name}" (Business: ${targetAccount.business_name || 'N/A'}, ID: ${adAccountId})`);
+              // Skip other strategies - we found the target account
+            } else {
+              console.log(`ℹ️  [Ad Account Detection] Target ad account "${targetBusinessName}" not found, trying other strategies...`);
             }
-          } else {
-            // Log why page endpoint failed
-            const errorText = await pageAdAccountsResponse.text();
-            console.log(`ℹ️  [Ad Account Detection] Page endpoint returned ${pageAdAccountsResponse.status}: ${errorText.substring(0, 200)}`);
           }
           
-          // Strategy 2: Try using page access token (for customer pages managed by you)
-          if (!foundAdAccounts && finalPageAccessToken) {
+          // Strategy 1: Try to get ad accounts directly from the page (business portfolio ad accounts)
+          // Only if we haven't found the target account yet
+          if (!adAccountId) {
+          // This gets ad accounts associated with the page's business portfolio
+          console.log(`[Ad Account Detection] Strategy 1: Trying to fetch ad accounts from page ${pageId} using user token...`);
+            const pageAdAccountsUrl = `https://graph.facebook.com/v24.0/${pageId}/adaccounts?access_token=${account.access_token}&fields=id,account_id,name&limit=25`;
+            const pageAdAccountsResponse = await fetch(pageAdAccountsUrl);
+            
+            let foundAdAccounts = false;
+            
+            if (pageAdAccountsResponse.ok) {
+              const pageAdAccountsData = await pageAdAccountsResponse.json();
+              const pageAdAccounts = pageAdAccountsData.data || [];
+              
+              if (pageAdAccounts.length > 0) {
+                // Use the ad account from the page's business portfolio
+                adAccountId = pageAdAccounts[0].account_id || pageAdAccounts[0].id?.replace(/^act_/i, '') || null;
+                console.log(`✅ [Ad Account Detection] Found ${pageAdAccounts.length} ad account(s) from page's business portfolio`);
+                console.log(`✅ [Ad Account Detection] Using ad account: "${pageAdAccounts[0].name || adAccountId}" (ID: ${adAccountId})`);
+                foundAdAccounts = true;
+              }
+            } else {
+              // Log why page endpoint failed
+              const errorText = await pageAdAccountsResponse.text();
+              console.log(`ℹ️  [Ad Account Detection] Page endpoint returned ${pageAdAccountsResponse.status}: ${errorText.substring(0, 200)}`);
+            }
+            
+            // Strategy 2: Try using page access token (for customer pages managed by you)
+            if (!foundAdAccounts && finalPageAccessToken) {
             console.log(`[Ad Account Detection] Strategy 2: Trying to fetch ad accounts using page access token...`);
             const pageTokenAdAccountsUrl = `https://graph.facebook.com/v24.0/${pageId}/adaccounts?access_token=${finalPageAccessToken}&fields=id,account_id,name&limit=25`;
             const pageTokenAdAccountsResponse = await fetch(pageTokenAdAccountsUrl);
@@ -582,9 +611,9 @@ export async function POST(request: NextRequest) {
               console.log(`ℹ️  [Ad Account Detection] Strategy 2 failed (${pageTokenAdAccountsResponse.status}): ${errorMessage}`);
             }
           }
-          
-          // Strategy 3: Try to get business manager from page, then get ad accounts from business
-          if (!foundAdAccounts) {
+            
+            // Strategy 3: Try to get business manager from page, then get ad accounts from business
+            if (!foundAdAccounts) {
             try {
               console.log(`[Ad Account Detection] Strategy 3: Trying to get business manager ID from page...`);
               // Get business manager ID from page
@@ -708,11 +737,13 @@ export async function POST(request: NextRequest) {
               console.log(`ℹ️  [Ad Account Detection] Strategy 3 failed: ${error}`);
             }
           }
+          } // End of Strategy 1, 2, 3 block (if !adAccountId)
           
           // Fallback: Try /me/adaccounts but filter/search for page-related accounts
-          if (!foundAdAccounts) {
-            // If page endpoint doesn't work, try /me/adaccounts but filter/search for page-related accounts
-            console.log(`[Ad Account Detection] Page ad accounts endpoint not available, trying user ad accounts...`);
+          // Only if we haven't found any ad account yet (including from priority strategy and other strategies)
+          if (!adAccountId) {
+            // If all other strategies failed, try /me/adaccounts but filter/search for page-related accounts
+            console.log(`[Ad Account Detection] All strategies failed, trying user ad accounts as fallback...`);
             const userAdAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${account.access_token}&fields=id,account_id,name&limit=50`;
             const userAdAccountsResponse = await fetch(userAdAccountsUrl);
             
@@ -851,6 +882,95 @@ export async function POST(request: NextRequest) {
       { 
         error: error?.message || 'Internal server error',
         details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await auth();
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { pageId, adAccountId, provider: providerParam } = body;
+
+    if (!pageId) {
+      return NextResponse.json(
+        { error: 'Page ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const provider = providerParam || 'facebook';
+
+    // Normalize ad account ID (remove 'act_' prefix if present)
+    const normalizedAdAccountId = adAccountId 
+      ? String(adAccountId).trim().replace(/^act_/i, '')
+      : null;
+
+    // Update the ad account ID for the connected page
+    try {
+      const updateData: any = {
+        updatedAt: new Date(),
+      };
+
+      if (normalizedAdAccountId) {
+        updateData.adAccountId = normalizedAdAccountId;
+        console.log(`✅ [Ad Account Update] Setting ad account ID: ${normalizedAdAccountId} for page ${pageId}`);
+      } else {
+        updateData.adAccountId = null;
+        console.log(`✅ [Ad Account Update] Clearing ad account ID for page ${pageId}`);
+      }
+
+      const connectedPage = await prisma.connectedPage.update({
+        where: {
+          userId_pageId_provider: {
+            userId: session.user.id,
+            pageId,
+            provider,
+          },
+        },
+        data: updateData,
+        select: {
+          id: true,
+          pageId: true,
+          pageName: true,
+          adAccountId: true,
+          provider: true,
+        },
+      });
+
+      // Clear the cache so fresh data is fetched immediately
+      const cacheKey = `pages_${session.user.id}`;
+      pagesCache.delete(cacheKey);
+
+      return NextResponse.json({
+        success: true,
+        page: connectedPage,
+        message: normalizedAdAccountId 
+          ? `Ad account ID updated successfully`
+          : `Ad account ID cleared successfully`,
+      });
+    } catch (dbError: any) {
+      if (dbError.code === 'P2025') {
+        return NextResponse.json(
+          { error: 'Page not found' },
+          { status: 404 }
+        );
+      }
+      throw dbError;
+    }
+  } catch (error: any) {
+    console.error('[Ad Account Update] Error:', error);
+    return NextResponse.json(
+      {
+        error: error?.message || 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error?.message : undefined,
       },
       { status: 500 }
     );

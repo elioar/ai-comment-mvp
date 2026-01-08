@@ -31,6 +31,17 @@ interface ConnectedPage {
   provider: string;
   createdAt: string;
   pageAccessToken?: string;
+  adAccountId?: string | null;
+}
+
+interface AdAccount {
+  id: string;
+  accountId: string;
+  name: string;
+  currency?: string;
+  timezone?: string;
+  businessName?: string;
+  status?: string;
 }
 
 export default function PagesPage() {
@@ -50,6 +61,10 @@ export default function PagesPage() {
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasNoActiveAccount, setHasNoActiveAccount] = useState(false);
+  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
+  const [loadingAdAccounts, setLoadingAdAccounts] = useState(false);
+  const [updatingAdAccount, setUpdatingAdAccount] = useState<string | null>(null);
+  const [expandedAdAccountPage, setExpandedAdAccountPage] = useState<string | null>(null);
   const hasHandledOAuth = useRef(false);
   const isFetching = useRef(false);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -75,6 +90,13 @@ export default function PagesPage() {
       router.push('/login');
     }
   }, [status, router]);
+
+  // Fetch ad accounts when connected pages are loaded
+  useEffect(() => {
+    if (connectedPages.length > 0 && adAccounts.length === 0 && !loadingAdAccounts) {
+      fetchAdAccounts();
+    }
+  }, [connectedPages.length]);
 
   useEffect(() => {
     if (session && !hasInitialFetch.current) {
@@ -217,6 +239,72 @@ export default function PagesPage() {
     performFetch(showLoading);
   };
 
+  const fetchAdAccounts = async () => {
+    if (loadingAdAccounts) return;
+    
+    setLoadingAdAccounts(true);
+    try {
+      const response = await fetch('/api/facebook/ad-accounts');
+      const data = await response.json();
+      
+      if (response.ok && data.adAccounts) {
+        setAdAccounts(data.adAccounts);
+      } else {
+        console.error('Failed to fetch ad accounts:', data.error);
+      }
+    } catch (error) {
+      console.error('Error fetching ad accounts:', error);
+    } finally {
+      setLoadingAdAccounts(false);
+    }
+  };
+
+  const updateAdAccount = async (pageId: string, adAccountIdOrFullId: string | null, provider: string) => {
+    setUpdatingAdAccount(pageId);
+    setError(null);
+    try {
+      // Normalize the ad account ID: remove 'act_' prefix if present (for API/database storage)
+      let normalizedAdAccountId: string | null = null;
+      if (adAccountIdOrFullId) {
+        normalizedAdAccountId = adAccountIdOrFullId.replace(/^act_/i, '').trim();
+        if (normalizedAdAccountId === '') {
+          normalizedAdAccountId = null;
+        }
+      }
+      
+      const response = await fetch('/api/facebook/pages', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pageId,
+          adAccountId: normalizedAdAccountId,
+          provider,
+        }),
+      });
+
+      const responseData = await response.json();
+
+      if (response.ok) {
+        // Update the connected page in state
+        setConnectedPages(prev => prev.map(page => 
+          page.pageId === pageId && page.provider === provider
+            ? { ...page, adAccountId: responseData.page?.adAccountId || null }
+            : page
+        ));
+        setExpandedAdAccountPage(null);
+      } else {
+        setError(responseData.error || 'Failed to update ad account');
+      }
+    } catch (error) {
+      console.error('Error updating ad account:', error);
+      setError('Error updating ad account');
+    } finally {
+      setUpdatingAdAccount(null);
+    }
+  };
+
   const connectPage = async (page: FacebookPage | InstagramPage, provider: 'facebook' | 'instagram' = 'facebook') => {
     setConnecting(page.id);
     setError(null);
@@ -260,6 +348,7 @@ export default function PagesPage() {
             pageName: responseData.page.pageName,
             provider: responseData.page.provider,
             createdAt: responseData.page.createdAt,
+            adAccountId: responseData.page.adAccountId || null,
           };
           
           // Add to connected pages list if not already there
@@ -857,19 +946,33 @@ export default function PagesPage() {
                                     </p>
                                   </div>
                                 </div>
-                                <div className="flex items-center justify-between gap-3">
-                                  <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300">
-                                    Disconnected
-                                  </span>
-                                  <Link
-                                    href={`/dashboard/comments?pageId=${connectedPage.pageId}`}
-                                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                    </svg>
-                                    View Comments
-                                  </Link>
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300">
+                                      Disconnected
+                                    </span>
+                                    <Link
+                                      href={`/dashboard/comments?pageId=${connectedPage.pageId}`}
+                                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                      </svg>
+                                      View Comments
+                                    </Link>
+                                  </div>
+                                  
+                                  {/* Ad Account Display for Facebook pages */}
+                                  {connectedPage.provider === 'facebook' && connectedPage.adAccountId && (
+                                    <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
+                                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                        </svg>
+                                        <span>Ad Account: <span className="font-medium text-gray-900 dark:text-gray-100">{connectedPage.adAccountId}</span></span>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             ))}
@@ -896,6 +999,7 @@ export default function PagesPage() {
                           {pages.map((page) => {
                       const isConnected = isPageConnected(page.id, 'facebook');
                       const isProcessing = connecting === page.id || disconnecting === page.id;
+                      const connectedPage = connectedPages.find(cp => cp.pageId === page.id && cp.provider === 'facebook');
                       
                       return (
                         <div
@@ -975,17 +1079,31 @@ export default function PagesPage() {
                             </div>
                             
                             {isConnected && (
-                              <Link
-                                href={`/dashboard/comments?pageId=${page.id}`}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                </svg>
-                                View Comments
-                              </Link>
+                              <>
+                                <Link
+                                  href={`/dashboard/comments?pageId=${page.id}`}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                  </svg>
+                                  View Comments
+                                </Link>
+                              </>
                             )}
                           </div>
+                          
+                          {/* Ad Account Display for connected Facebook pages */}
+                          {isConnected && connectedPage && connectedPage.adAccountId && (
+                            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+                              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                </svg>
+                                <span>Ad Account: <span className="font-medium text-gray-900 dark:text-gray-100">{connectedPage.adAccountId}</span></span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                           })}
