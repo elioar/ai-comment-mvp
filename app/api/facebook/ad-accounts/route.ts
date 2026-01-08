@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     });
 
     console.log(`✅ [Ad Accounts API] Found ${normalizedAdAccounts.length} ad account(s) after filtering`);
-    normalizedAdAccounts.forEach((acc, idx) => {
+    normalizedAdAccounts.forEach((acc: { id: string; accountId: string; name: string; businessName?: string }, idx: number) => {
       console.log(`  [${idx + 1}] ${acc.name} - ID: ${acc.id}, Account ID: ${acc.accountId}, Business: ${acc.businessName}`);
     });
 
