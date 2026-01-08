@@ -576,8 +576,9 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       };
 
-      // Only set adAccountId on create, or update if not already set
-      if (!existingPage || !existingPage.adAccountId) {
+      // Set adAccountId on create, or update if not already set, or if detection succeeded (may have new permissions)
+      // Always try to update if we detected an ad account (even if one existed before), as permissions may have changed
+      if (!existingPage || !existingPage.adAccountId || adAccountId) {
         if (adAccountId) {
           updateData.adAccountId = adAccountId;
         }
