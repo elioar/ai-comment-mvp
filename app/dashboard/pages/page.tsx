@@ -251,6 +251,35 @@ export default function PagesPage() {
 
       if (response.ok) {
         console.log('Page connected successfully:', responseData);
+        
+        // Optimistically update the state immediately with the newly connected page
+        if (responseData.page) {
+          const newConnectedPage = {
+            id: responseData.page.id,
+            pageId: responseData.page.pageId,
+            pageName: responseData.page.pageName,
+            provider: responseData.page.provider,
+            createdAt: responseData.page.createdAt,
+          };
+          
+          // Add to connected pages list if not already there
+          setConnectedPages(prev => {
+            const exists = prev.some(p => p.pageId === newConnectedPage.pageId && p.provider === newConnectedPage.provider);
+            if (exists) {
+              // Update existing page
+              return prev.map(p => 
+                p.pageId === newConnectedPage.pageId && p.provider === newConnectedPage.provider
+                  ? newConnectedPage
+                  : p
+              );
+            } else {
+              // Add new page
+              return [...prev, newConnectedPage];
+            }
+          });
+        }
+        
+        // Force fetch after connection to get fresh data (cache is cleared server-side)
         await fetchData(true, false); // Force fetch after connection, no loading spinner
       } else {
         console.error('Failed to connect page:', responseData);
@@ -273,6 +302,10 @@ export default function PagesPage() {
       });
 
       if (response.ok) {
+        // Optimistically remove the page from the connected pages list immediately
+        setConnectedPages(prev => prev.filter(p => !(p.pageId === pageId && p.provider === provider)));
+        
+        // Force fetch after disconnection to get fresh data (cache is cleared server-side)
         await fetchData(true, false); // Force fetch after disconnection, no loading spinner
       } else {
         const errorData = await response.json();
