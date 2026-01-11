@@ -99,10 +99,8 @@ export default function LoginPage() {
           message: t('auth.login.loginError'),
         });
       } else {
-        setAlertMessage({ type: 'success', message: t('auth.login.loginSuccess') });
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 1000);
+        // Redirect immediately after successful login
+        router.push('/dashboard');
       }
     } catch (error) {
       setAlertMessage({

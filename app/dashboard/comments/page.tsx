@@ -57,6 +57,7 @@ function CommentsPageContent() {
   const [selectedPostForModal, setSelectedPostForModal] = useState<string | null>(null);
   const [refreshingTokens, setRefreshingTokens] = useState(false);
   const [availablePages, setAvailablePages] = useState<Array<{ id: string; name: string; provider: string; image?: string }>>([]);
+  const [loadingPages, setLoadingPages] = useState(true);
   const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
   const [hidingCommentId, setHidingCommentId] = useState<string | null>(null);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
@@ -100,6 +101,7 @@ function CommentsPageContent() {
   useEffect(() => {
     if (session) {
       const fetchPages = async () => {
+        setLoadingPages(true);
         try {
           const response = await fetch('/api/facebook/pages');
           if (response.ok) {
@@ -137,10 +139,14 @@ function CommentsPageContent() {
           }
         } catch (error) {
           console.error('Error fetching pages:', error);
+        } finally {
+          setLoadingPages(false);
         }
       };
       
       fetchPages();
+    } else {
+      setLoadingPages(false);
     }
   }, [session]);
 
@@ -905,7 +911,7 @@ function CommentsPageContent() {
               </button>
               
               {/* Page Selector */}
-              {availablePages.length === 0 && !session ? (
+              {loadingPages || (availablePages.length === 0 && session) ? (
                 <div className="relative flex-1 min-w-0">
                   <div className="w-full sm:w-auto flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-xl">
                     <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gray-200 dark:bg-gray-800 rounded-xl animate-pulse"></div>
@@ -947,10 +953,10 @@ function CommentsPageContent() {
                     )}
                     <div className="flex-1 min-w-0 text-left">
                       <div className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white truncate">
-                        {currentPageName || t('dashboard.comments.selectPage') || 'Select a Page'}
+                        {currentPageName || t('dashboard.comments.selectPage', { defaultValue: 'Select a Page' })}
                       </div>
                       <div className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {t('dashboard.menu.comments') || 'Comments'}
+                        {t('dashboard.menu.comments', { defaultValue: 'Comments' })}
                       </div>
                     </div>
                     <svg className={`w-4 h-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-all duration-200 flex-shrink-0 ${pageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">

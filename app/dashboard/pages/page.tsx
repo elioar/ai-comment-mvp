@@ -65,6 +65,8 @@ export default function PagesPage() {
   const [loadingAdAccounts, setLoadingAdAccounts] = useState(false);
   const [updatingAdAccount, setUpdatingAdAccount] = useState<string | null>(null);
   const [expandedAdAccountPage, setExpandedAdAccountPage] = useState<string | null>(null);
+  const [showAddPageDropdown, setShowAddPageDropdown] = useState<'facebook' | 'instagram' | null>(null);
+  const [pageToDisconnect, setPageToDisconnect] = useState<{ pageId: string; provider: string; pageName: string } | null>(null);
   const hasHandledOAuth = useRef(false);
   const isFetching = useRef(false);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -734,7 +736,7 @@ export default function PagesPage() {
               <div className="flex flex-col items-center justify-center py-20">
                 <div className="w-12 h-12 border-4 border-gray-200 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin"></div>
                 <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                  Loading pages...
+                  {t('dashboard.pages.loadingPages', 'Loading pages...')}
                 </p>
               </div>
                 ) : pages.length === 0 && instagramPages.length === 0 && connectedPages.length === 0 ? (
@@ -747,13 +749,13 @@ export default function PagesPage() {
                       </svg>
                     </div>
                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                          Connect Your Facebook & Instagram Pages
+                          {t('dashboard.pages.connectYourFacebookInstagram', 'Connect Your Facebook & Instagram Pages')}
                         </h2>
                         <p className="text-gray-600 dark:text-gray-400 mb-2">
                           {t('dashboard.pages.description')}
                         </p>
                         <p className="text-sm text-gray-500 dark:text-gray-500 mb-6">
-                          Make sure you have admin access to the Facebook pages and Instagram Business accounts you want to connect.
+                          {t('dashboard.pages.adminAccessRequired', 'Make sure you have admin access to the Facebook pages and Instagram Business accounts you want to connect.')}
                         </p>
                   </div>
                   <button
@@ -778,10 +780,10 @@ export default function PagesPage() {
                     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                     </svg>
-                    Connect Facebook Account
+                    {t('dashboard.pages.connectFacebookAccount', 'Connect Facebook Account')}
                   </button>
                   <p className="text-xs text-gray-500 dark:text-gray-500 mt-4">
-                    Your Facebook account will be linked to your current account ({session?.user?.email})
+                    {t('dashboard.pages.accountWillBeLinked', 'Your Facebook account will be linked to your current account ({{email}})', { email: session?.user?.email })}
                   </p>
                 </div>
               </div>
@@ -790,7 +792,7 @@ export default function PagesPage() {
                 <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
                   <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                      Your Pages
+                      {t('dashboard.pages.yourPages', 'Your Pages')}
                     </h1>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {t('dashboard.pages.description')}
@@ -821,7 +823,7 @@ export default function PagesPage() {
                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                       </svg>
-                      <span>Connect Facebook & Instagram</span>
+                      <span>{t('dashboard.pages.connectFacebookInstagram', 'Connect Facebook & Instagram')}</span>
                     </button>
                   )}
                 </div>
@@ -838,10 +840,10 @@ export default function PagesPage() {
                         </div>
                         <div>
                           <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                            Facebook Account Disconnected
+                            {t('dashboard.pages.facebookAccountDisconnected', 'Facebook Account Disconnected')}
                           </h3>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Reconnect your Facebook account to manage your pages and fetch comments.
+                            {t('dashboard.pages.reconnectToManage', 'Reconnect your Facebook account to manage your pages and fetch comments.')}
                           </p>
                         </div>
                       </div>
@@ -900,14 +902,14 @@ export default function PagesPage() {
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                         </svg>
-                        Connect Facebook & Instagram
+                        {t('dashboard.pages.connectFacebookInstagram', 'Connect Facebook & Instagram')}
                       </button>
                     </div>
                   </div>
                 )}
 
                 {(pages.length > 0 || instagramPages.length > 0 || connectedPages.length > 0) && (
-                  <div className="space-y-8">
+                  <div>
                     {/* Show Connected Pages Even Without Active Facebook Account */}
                     {connectedPages.length > 0 && pages.length === 0 && instagramPages.length === 0 && (
                       <div className="mb-6">
@@ -917,7 +919,7 @@ export default function PagesPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
                             <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                              You have {connectedPages.length} connected page(s), but your Facebook account is disconnected. Reconnect to manage them.
+                              {t('dashboard.pages.connectedPagesWarning', 'You have {{count}} connected page(s), but your Facebook account is disconnected. Reconnect to manage them.', { count: connectedPages.length })}
                             </p>
                           </div>
                         </div>
@@ -925,10 +927,10 @@ export default function PagesPage() {
                         {/* Display Connected Pages */}
                         <div className="space-y-4">
                           <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Select a Page to View Comments</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Choose a connected Facebook or Instagram page to view and manage its comments</p>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t('dashboard.pages.selectPageToViewComments', 'Select a Page to View Comments')}</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('dashboard.pages.chooseConnectedPage', 'Choose a connected Facebook or Instagram page to view and manage its comments')}</p>
                           </div>
-                          <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Connected Pages</h3>
+                          <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{t('dashboard.pages.connectedPages', 'Connected Pages')}</h3>
                           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {connectedPages.map((connectedPage) => (
                               <div
@@ -963,7 +965,7 @@ export default function PagesPage() {
                                 <div className="space-y-3">
                                   <div className="flex items-center justify-between gap-3">
                                     <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300">
-                                      Disconnected
+                                      {t('dashboard.pages.disconnected', 'Disconnected')}
                                     </span>
                                     <Link
                                       href={`/dashboard/comments?pageId=${connectedPage.pageId}`}
@@ -972,7 +974,7 @@ export default function PagesPage() {
                                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                       </svg>
-                                      View Comments
+                                      {t('dashboard.pages.viewComments', 'View Comments')}
                                     </Link>
                                   </div>
                                   
@@ -984,7 +986,7 @@ export default function PagesPage() {
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                                         </svg>
                                         <span>
-                                          Ad Account: <span className="font-medium text-gray-900 dark:text-gray-100">
+                                          {t('dashboard.pages.adAccount', 'Ad Account:')} <span className="font-medium text-gray-900 dark:text-gray-100">
                                             {loadingAdAccounts ? connectedPage.adAccountId : getAdAccountName(connectedPage.adAccountId)}
                                           </span>
                                         </span>
@@ -999,259 +1001,594 @@ export default function PagesPage() {
                       </div>
                     )}
 
-                    {/* Facebook Pages Section */}
-                    {pages.length > 0 && (
-                      <div>
-                        <div className="mb-4 flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                            <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Facebook Pages</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Manage your Facebook pages</p>
-                          </div>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                          {pages.map((page) => {
-                      const isConnected = isPageConnected(page.id, 'facebook');
-                      const isProcessing = connecting === page.id || disconnecting === page.id;
-                      const connectedPage = connectedPages.find(cp => cp.pageId === page.id && cp.provider === 'facebook');
-                      
-                      return (
-                        <div
-                          key={`fb-${page.id}`}
-                          className={`bg-white dark:bg-gray-950 rounded-xl border ${
-                            isConnected 
-                              ? 'border-blue-200 dark:border-blue-900' 
-                              : 'border-gray-200 dark:border-gray-800'
-                          } p-6 hover:shadow-lg transition-all`}
-                        >
-                          <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md ${
-                                isConnected 
-                                  ? 'bg-blue-600' 
-                                  : 'bg-gray-400 dark:bg-gray-700'
-                              }`}>
-                                <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                                </svg>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h3 className="font-semibold text-gray-900 dark:text-white text-lg truncate">
-                                  {page.name}
-                                </h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Facebook Page
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3 flex-1">
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={isConnected}
-                                  onChange={() => {
-                                    if (isConnected) {
-                                      disconnectPage(page.id, 'facebook');
-                                    } else {
-                                      connectPage(page, 'facebook');
-                                    }
-                                  }}
-                                  disabled={isProcessing}
-                                  className="sr-only peer"
-                                />
-                                <div className={`
-                                  relative w-11 h-6 rounded-full transition-all duration-300 ease-in-out
-                                  ${isConnected 
-                                    ? 'bg-blue-600 dark:bg-blue-500' 
-                                    : 'bg-gray-300 dark:bg-gray-600'
-                                  }
-                                  ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                                  peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800
-                                `}>
-                                  <div className={`
-                                    absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-lg
-                                    transform transition-transform duration-300 ease-in-out
-                                    ${isConnected ? 'translate-x-5' : 'translate-x-0'}
-                                  `} />
-                                </div>
-                              </label>
-                              <span className={`text-sm font-medium ${
-                                isProcessing
-                                  ? 'text-gray-500 dark:text-gray-500'
-                                  : isConnected
-                                  ? 'text-blue-600 dark:text-blue-400'
-                                  : 'text-gray-600 dark:text-gray-400'
-                              }`}>
-                                {isProcessing 
-                                  ? (isConnected ? 'Disconnecting...' : 'Connecting...')
-                                  : (isConnected ? 'Connected' : 'Disconnected')
-                                }
-                              </span>
-                            </div>
-                            
-                            {isConnected && (
-                              <>
-                                <Link
-                                  href={`/dashboard/comments?pageId=${page.id}`}
-                                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    {/* Two Column Layout: Facebook (Left) & Instagram (Right) */}
+                    {(pages.length > 0 || instagramPages.length > 0) && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Facebook Pages Column */}
+                        <div className="space-y-5">
+                          <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-blue-100/50 to-indigo-50 dark:from-blue-950/50 dark:via-blue-900/30 dark:to-indigo-950/50 rounded-2xl p-6 border border-blue-200/50 dark:border-blue-800/50 shadow-lg shadow-blue-500/5">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-400/10 dark:bg-blue-500/5 rounded-full blur-3xl"></div>
+                            <div className="relative flex items-center gap-4">
+                              <div className="relative">
+                                <div className="absolute inset-0 bg-blue-600 rounded-xl blur-md opacity-50"></div>
+                                <div className="relative w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+                                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                                   </svg>
-                                  View Comments
-                                </Link>
-                              </>
-                            )}
+                                </div>
+                              </div>
+                              <div className="flex-1">
+                                <h2 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-400 dark:to-blue-300 bg-clip-text text-transparent mb-1">
+                                  {t('dashboard.pages.facebookPages', 'Facebook Pages')}
+                                </h2>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">{t('dashboard.pages.manageConnectedPages', 'Manage your connected pages')}</p>
+                              </div>
+                              {(() => {
+                                const disconnectedPages = pages.filter((page) => !isPageConnected(page.id, 'facebook'));
+                                const hasDisconnectedPages = disconnectedPages.length > 0;
+                                
+                                return (
+                                  <div className="relative">
+                                    <button
+                                      onClick={() => setShowAddPageDropdown(showAddPageDropdown === 'facebook' ? null : 'facebook')}
+                                      className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all duration-200 hover:scale-110 group"
+                                      title={hasDisconnectedPages ? t('dashboard.pages.addPageTooltip', 'Add Page ({{count}} available)', { count: disconnectedPages.length }) : t('dashboard.pages.allPagesConnectedTooltip', 'All pages are connected')}
+                                    >
+                                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                      </svg>
+                                    </button>
+                                    
+                                    {/* Modal */}
+                                    {showAddPageDropdown === 'facebook' && (
+                                      hasDisconnectedPages ? (
+                                        /* Modal with disconnected pages */
+                                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                          {/* Backdrop */}
+                                          <div 
+                                            className="absolute inset-0 bg-black/50 backdrop-blur-sm" 
+                                            onClick={() => setShowAddPageDropdown(null)}
+                                          ></div>
+                                          
+                                          {/* Modal */}
+                                          <div className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+                                            {/* Header */}
+                                            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50">
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                                                    </svg>
+                                                  </div>
+                                                  <div>
+                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('dashboard.pages.addFacebookPage', 'Add Facebook Page')}</h3>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                      {t('dashboard.pages.pagesAvailable', '{{count}} page available', { count: disconnectedPages.length })}
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  onClick={() => setShowAddPageDropdown(null)}
+                                                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                                >
+                                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                  </svg>
+                                                </button>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Content */}
+                                            <div className="max-h-96 overflow-y-auto py-2 modal-scrollbar">
+                                              {disconnectedPages.map((page) => {
+                                                const isProcessing = connecting === page.id || disconnecting === page.id;
+                                                return (
+                                                  <div
+                                                    key={`add-fb-${page.id}`}
+                                                    className="w-full flex items-center gap-3 px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                                  >
+                                                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow-md">
+                                                      <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                                                      </svg>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                      <h4 className="font-semibold text-gray-900 dark:text-white truncate mb-0.5">
+                                                        {page.name}
+                                                      </h4>
+                                                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                        {t('dashboard.pages.facebookPage', 'Facebook Page')}
+                                                      </p>
+                                                    </div>
+                                                    <button
+                                                      onClick={() => {
+                                                        if (!isProcessing) {
+                                                          connectPage(page, 'facebook');
+                                                          setShowAddPageDropdown(null);
+                                                        }
+                                                      }}
+                                                      disabled={isProcessing}
+                                                      className="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-lg flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 group"
+                                                      title={t('dashboard.pages.addPage', 'Add page')}
+                                                    >
+                                                      {isProcessing ? (
+                                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                      ) : (
+                                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                        </svg>
+                                                      )}
+                                                    </button>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* Modal - All pages connected */
+                                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                          {/* Backdrop */}
+                                          <div 
+                                            className="absolute inset-0 bg-black/50 backdrop-blur-sm" 
+                                            onClick={() => setShowAddPageDropdown(null)}
+                                          ></div>
+                                          
+                                          {/* Modal */}
+                                          <div className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+                                            {/* Header */}
+                                            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50">
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                                                    </svg>
+                                                  </div>
+                                                  <div>
+                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('dashboard.pages.facebookPages', 'Facebook Pages')}</h3>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.pages.allPagesConnected', 'All pages connected')}</p>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  onClick={() => setShowAddPageDropdown(null)}
+                                                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                                >
+                                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                  </svg>
+                                                </button>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Content */}
+                                            <div className="px-6 py-8 text-center">
+                                              <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/30 rounded-full flex items-center justify-center">
+                                                <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                              </div>
+                                              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                                                {t('dashboard.pages.allFacebookPagesActivated', 'All Facebook Pages Activated')}
+                                              </h4>
+                                              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                                                {t('dashboard.pages.allFacebookPagesActive', 'All Facebook pages in your account are currently connected and active.')}
+                                              </p>
+                                              <button
+                                                onClick={() => setShowAddPageDropdown(null)}
+                                                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg transition-all duration-200 font-semibold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/40"
+                                              >
+                                                {t('dashboard.pages.gotIt', 'Got it')}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )
+                                    )}
+                                    </div>
+                                  );
+                                })()}
+                            </div>
                           </div>
                           
-                          {/* Ad Account Display for connected Facebook pages */}
-                          {isConnected && connectedPage && connectedPage.adAccountId && (
-                            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
-                              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                          {pages.length > 0 ? (
+                            <div className="space-y-4">
+                              {/* Show only connected pages */}
+                              {pages
+                                .filter((page) => isPageConnected(page.id, 'facebook'))
+                                .map((page) => {
+                                  const isConnected = true;
+                                  const isProcessing = connecting === page.id || disconnecting === page.id;
+                                  const connectedPage = connectedPages.find(cp => cp.pageId === page.id && cp.provider === 'facebook');
+                                  
+                                  return (
+                                    <div
+                                      key={`fb-${page.id}`}
+                                      className="group relative bg-white dark:bg-gray-900 rounded-xl border border-blue-200/60 dark:border-blue-800/50 p-5 hover:shadow-xl hover:shadow-blue-500/10 dark:hover:shadow-blue-900/20 hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-300 hover:-translate-y-1"
+                                    >
+                                      {/* Background gradient on hover */}
+                                      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/0 via-blue-50/0 to-blue-100/0 dark:from-blue-950/0 dark:via-blue-900/0 dark:to-blue-800/0 group-hover:from-blue-50/50 group-hover:via-blue-50/30 group-hover:to-blue-100/20 dark:group-hover:from-blue-950/30 dark:group-hover:via-blue-900/20 dark:group-hover:to-blue-800/10 rounded-xl transition-all duration-300"></div>
+                                      
+                                      <div className="relative">
+                                        <div className="flex items-center justify-between mb-4">
+                                          <div className="flex items-center gap-3 flex-1 min-w-0 pr-10">
+                                            <div className="relative">
+                                              <div className="absolute inset-0 bg-blue-500 rounded-xl blur-md opacity-40 group-hover:opacity-60 transition-opacity"></div>
+                                              <div className="relative w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:shadow-blue-500/50 transition-all">
+                                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                                                </svg>
+                                              </div>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <h3 className="font-bold text-gray-900 dark:text-white text-base truncate mb-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                                {page.name}
+                                              </h3>
+                                              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                {t('dashboard.pages.facebookPage', 'Facebook Page')}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          {isConnected && (
+                                            <button
+                                              onClick={() => setPageToDisconnect({ pageId: page.id, provider: 'facebook', pageName: page.name })}
+                                              disabled={isProcessing}
+                                              className="absolute top-0 right-0 p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group/btn"
+                                              title={t('dashboard.pages.titleDisconnectPage', 'Disconnect page')}
+                                            >
+                                              <svg className="w-4 h-4 group-hover/btn:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          )}
+                                        </div>
+
+                                        <div className="flex items-center justify-between gap-3 mb-3">
+                                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-100 to-blue-50 dark:from-blue-900/40 dark:to-blue-800/30 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-700/50 shadow-sm">
+                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                            {t('dashboard.pages.connected', 'Connected')}
+                                          </span>
+                                          
+                                          {isConnected && (
+                                            <Link
+                                              href={`/dashboard/comments?pageId=${page.id}`}
+                                              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg transition-all duration-200 font-semibold text-xs whitespace-nowrap shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105 transform"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                              </svg>
+                                              {t('dashboard.pages.viewComments', 'View Comments')}
+                                            </Link>
+                                          )}
+                                        </div>
+                                        
+                                        {/* Ad Account Display for connected Facebook pages */}
+                                        {isConnected && connectedPage && connectedPage.adAccountId && (
+                                          <div className="mt-4 pt-4 border-t border-blue-100 dark:border-blue-800/50">
+                                            <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                              </svg>
+                                              <span className="font-medium">
+                                                {t('dashboard.pages.adAccount', 'Ad Account:')} <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                                  {loadingAdAccounts ? connectedPage.adAccountId : getAdAccountName(connectedPage.adAccountId)}
+                                                </span>
+                                              </span>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              
+                            </div>
+                          ) : (
+                            <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-blue-50/30 dark:from-gray-900 dark:to-blue-950/20 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
+                              <div className="w-16 h-16 mx-auto mb-4 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                 </svg>
-                                <span>
-                                  Ad Account: <span className="font-medium text-gray-900 dark:text-gray-100">
-                                    {loadingAdAccounts ? connectedPage.adAccountId : getAdAccountName(connectedPage.adAccountId)}
-                                  </span>
-                                </span>
                               </div>
+                              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('dashboard.pages.noFacebookPagesAvailable', 'No Facebook pages available')}</p>
                             </div>
                           )}
                         </div>
-                      );
-                          })}
-                        </div>
-                      </div>
-                    )}
 
-                    {/* Instagram Pages Section */}
-                    {instagramPages.length > 0 && (
-                      <div>
-                        <div className="mb-4 flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 rounded-lg flex items-center justify-center">
-                            <svg className="w-6 h-6 text-pink-600 dark:text-pink-400" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                            </svg>
-                          </div>
-                          <div>
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Instagram Accounts</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Manage your Instagram Business accounts</p>
-                          </div>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                          {instagramPages.map((page) => {
-                      const isConnected = isPageConnected(page.id, 'instagram');
-                      const isProcessing = connecting === page.id || disconnecting === page.id;
-                      
-                      return (
-                        <div
-                          key={`ig-${page.id}`}
-                          className={`bg-white dark:bg-gray-950 rounded-xl border ${
-                            isConnected 
-                              ? 'border-pink-200 dark:border-pink-900' 
-                              : 'border-gray-200 dark:border-gray-800'
-                          } p-6 hover:shadow-lg transition-all`}
-                        >
-                          <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md overflow-hidden ${
-                                isConnected 
-                                  ? 'bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500' 
-                                  : 'bg-gray-400 dark:bg-gray-700'
-                              }`}>
-                                {page.profile_picture_url && isConnected ? (
-                                  <img 
-                                    src={page.profile_picture_url} 
-                                    alt={page.username}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        {/* Instagram Pages Column */}
+                        <div className="space-y-5">
+                          <div className="relative overflow-hidden bg-gradient-to-br from-pink-50 via-purple-50/50 to-orange-50 dark:from-pink-950/50 dark:via-purple-900/30 dark:to-orange-950/50 rounded-2xl p-6 border border-pink-200/50 dark:border-pink-800/50 shadow-lg shadow-pink-500/5">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-400/10 dark:bg-pink-500/5 rounded-full blur-3xl"></div>
+                            <div className="relative flex items-center gap-4">
+                              <div className="relative">
+                                <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 rounded-xl blur-md opacity-50"></div>
+                                <div className="relative w-14 h-14 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/30">
+                                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
                                   </svg>
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h3 className="font-semibold text-gray-900 dark:text-white text-lg truncate">
-                                  {page.name || page.username}
-                                </h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Instagram Account
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3 flex-1">
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={isConnected}
-                                  onChange={() => {
-                                    if (isConnected) {
-                                      disconnectPage(page.id, 'instagram');
-                                    } else {
-                                      connectPage(page, 'instagram');
-                                    }
-                                  }}
-                                  disabled={isProcessing}
-                                  className="sr-only peer"
-                                />
-                                <div className={`
-                                  relative w-11 h-6 rounded-full transition-all duration-300 ease-in-out
-                                  ${isConnected 
-                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-500 dark:to-pink-500' 
-                                    : 'bg-gray-300 dark:bg-gray-600'
-                                  }
-                                  ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                                  peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-pink-300 dark:peer-focus:ring-pink-800
-                                `}>
-                                  <div className={`
-                                    absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-lg
-                                    transform transition-transform duration-300 ease-in-out
-                                    ${isConnected ? 'translate-x-5' : 'translate-x-0'}
-                                  `} />
                                 </div>
-                              </label>
-                              <span className={`text-sm font-medium ${
-                                isProcessing
-                                  ? 'text-gray-500 dark:text-gray-500'
-                                  : isConnected
-                                  ? 'text-pink-600 dark:text-pink-400'
-                                  : 'text-gray-600 dark:text-gray-400'
-                              }`}>
-                                {isProcessing 
-                                  ? (isConnected ? 'Disconnecting...' : 'Connecting...')
-                                  : (isConnected ? 'Connected' : 'Disconnected')
-                                }
-                              </span>
+                              </div>
+                              <div className="flex-1">
+                                <h2 className="text-xl font-bold bg-gradient-to-r from-pink-600 via-purple-600 to-orange-600 dark:from-pink-400 dark:via-purple-400 dark:to-orange-400 bg-clip-text text-transparent mb-1">
+                                  {t('dashboard.pages.instagramAccounts', 'Instagram Accounts')}
+                                </h2>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">{t('dashboard.pages.manageConnectedAccounts', 'Manage your connected accounts')}</p>
+                              </div>
+                              {(() => {
+                                const disconnectedInstagramPages = instagramPages.filter((page) => !isPageConnected(page.id, 'instagram'));
+                                const hasDisconnectedPages = disconnectedInstagramPages.length > 0;
+                                
+                                return (
+                                  <div className="relative">
+                                    <button
+                                      onClick={() => setShowAddPageDropdown(showAddPageDropdown === 'instagram' ? null : 'instagram')}
+                                      className="w-10 h-10 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-600 hover:from-purple-700 hover:via-pink-700 hover:to-orange-700 rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/30 hover:shadow-pink-500/50 transition-all duration-200 hover:scale-110 group"
+                                      title={hasDisconnectedPages ? t('dashboard.pages.addPageTooltip', 'Add Page ({{count}} available)', { count: disconnectedInstagramPages.length }) : t('dashboard.pages.allAccountsConnectedTooltip', 'All accounts are connected')}
+                                    >
+                                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                      </svg>
+                                    </button>
+                                    
+                                    {/* Modal */}
+                                    {showAddPageDropdown === 'instagram' && (
+                                      hasDisconnectedPages ? (
+                                        /* Modal with disconnected Instagram pages */
+                                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                          {/* Backdrop */}
+                                          <div 
+                                            className="absolute inset-0 bg-black/50 backdrop-blur-sm" 
+                                            onClick={() => setShowAddPageDropdown(null)}
+                                          ></div>
+                                          
+                                          {/* Modal */}
+                                          <div className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+                                            {/* Header */}
+                                            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-pink-50 via-purple-50 to-orange-50 dark:from-pink-950/50 dark:via-purple-950/50 dark:to-orange-950/50">
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                  <div className="w-10 h-10 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 rounded-lg flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                                    </svg>
+                                                  </div>
+                                                  <div>
+                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('dashboard.pages.addInstagramAccount', 'Add Instagram Account')}</h3>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                      {t('dashboard.pages.accountsAvailable', '{{count}} account available', { count: disconnectedInstagramPages.length })}
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  onClick={() => setShowAddPageDropdown(null)}
+                                                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                                >
+                                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                  </svg>
+                                                </button>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Content */}
+                                            <div className="max-h-96 overflow-y-auto py-2 modal-scrollbar-instagram">
+                                              {disconnectedInstagramPages.map((page) => {
+                                                const isProcessing = connecting === page.id || disconnecting === page.id;
+                                                return (
+                                                  <div
+                                                    key={`add-ig-${page.id}`}
+                                                    className="w-full flex items-center gap-3 px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                                  >
+                                                    <div className="w-12 h-12 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden shadow-md">
+                                                      {page.profile_picture_url ? (
+                                                        <img 
+                                                          src={page.profile_picture_url} 
+                                                          alt={page.username}
+                                                          className="w-full h-full object-cover"
+                                                        />
+                                                      ) : (
+                                                        <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                                        </svg>
+                                                      )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                      <h4 className="font-semibold text-gray-900 dark:text-white truncate mb-0.5">
+                                                        {page.name || page.username}
+                                                      </h4>
+                                                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                        {t('dashboard.pages.instagramAccount', 'Instagram Account')}
+                                                      </p>
+                                                    </div>
+                                                    <button
+                                                      onClick={() => {
+                                                        if (!isProcessing) {
+                                                          connectPage(page, 'instagram');
+                                                          setShowAddPageDropdown(null);
+                                                        }
+                                                      }}
+                                                      disabled={isProcessing}
+                                                      className="w-9 h-9 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-600 hover:from-purple-700 hover:via-pink-700 hover:to-orange-700 rounded-lg flex items-center justify-center shadow-md hover:shadow-lg transition-all duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 group"
+                                                      title={t('dashboard.pages.addAccount', 'Add account')}
+                                                    >
+                                                      {isProcessing ? (
+                                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                      ) : (
+                                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                        </svg>
+                                                      )}
+                                                    </button>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* Modal - All accounts connected */
+                                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                          {/* Backdrop */}
+                                          <div 
+                                            className="absolute inset-0 bg-black/50 backdrop-blur-sm" 
+                                            onClick={() => setShowAddPageDropdown(null)}
+                                          ></div>
+                                          
+                                          {/* Modal */}
+                                          <div className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-in fade-in zoom-in duration-200">
+                                            {/* Header */}
+                                            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-pink-50 via-purple-50 to-orange-50 dark:from-pink-950/50 dark:via-purple-950/50 dark:to-orange-950/50">
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                  <div className="w-10 h-10 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 rounded-lg flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                                    </svg>
+                                                  </div>
+                                                  <div>
+                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('dashboard.pages.instagramAccounts', 'Instagram Accounts')}</h3>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.pages.allAccountsConnected', 'All accounts connected')}</p>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  onClick={() => setShowAddPageDropdown(null)}
+                                                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                                >
+                                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                  </svg>
+                                                </button>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Content */}
+                                            <div className="px-6 py-8 text-center">
+                                              <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/30 rounded-full flex items-center justify-center">
+                                                <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                              </div>
+                                              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                                                {t('dashboard.pages.allInstagramAccountsActivated', 'All Instagram Accounts Activated')}
+                                              </h4>
+                                              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                                                {t('dashboard.pages.allInstagramAccountsActive', 'All Instagram accounts in your account are currently connected and active.')}
+                                              </p>
+                                              <button
+                                                onClick={() => setShowAddPageDropdown(null)}
+                                                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 hover:from-purple-700 hover:via-pink-700 hover:to-orange-700 text-white rounded-lg transition-all duration-200 font-semibold shadow-lg shadow-pink-500/25 hover:shadow-xl hover:shadow-pink-500/40"
+                                              >
+                                                {t('dashboard.pages.gotIt', 'Got it')}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )
+                                    )}
+                                    </div>
+                                  );
+                                })()}
                             </div>
-                            
-                            {isConnected && (
-                              <Link
-                                href={`/dashboard/comments?pageId=${page.id}`}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all font-medium text-sm whitespace-nowrap shadow-sm hover:shadow-md"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                </svg>
-                                View Comments
-                              </Link>
-                            )}
                           </div>
-                        </div>
-                      );
-                          })}
+                          
+                          {instagramPages.length > 0 ? (
+                            <div className="space-y-4">
+                              {/* Show only connected Instagram pages */}
+                              {instagramPages
+                                .filter((page) => isPageConnected(page.id, 'instagram'))
+                                .map((page) => {
+                                  const isConnected = true;
+                                  const isProcessing = connecting === page.id || disconnecting === page.id;
+                                  
+                                  return (
+                                    <div
+                                      key={`ig-${page.id}`}
+                                      className="group relative bg-white dark:bg-gray-900 rounded-xl border border-pink-200/60 dark:border-pink-800/50 p-5 hover:shadow-xl hover:shadow-pink-500/10 dark:hover:shadow-pink-900/20 hover:border-pink-300 dark:hover:border-pink-700 transition-all duration-300 hover:-translate-y-1"
+                                    >
+                                      {/* Background gradient on hover */}
+                                      <div className="absolute inset-0 bg-gradient-to-br from-pink-50/0 via-purple-50/0 to-orange-50/0 dark:from-pink-950/0 dark:via-purple-900/0 dark:to-orange-900/0 group-hover:from-pink-50/50 group-hover:via-purple-50/30 group-hover:to-orange-50/20 dark:group-hover:from-pink-950/30 dark:group-hover:via-purple-900/20 dark:group-hover:to-orange-900/10 rounded-xl transition-all duration-300"></div>
+                                      
+                                      <div className="relative">
+                                        <div className="flex items-center justify-between mb-4">
+                                          <div className="flex items-center gap-3 flex-1 min-w-0 pr-10">
+                                            <div className="relative">
+                                              <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 rounded-xl blur-md opacity-40 group-hover:opacity-60 transition-opacity"></div>
+                                              <div className="relative w-12 h-12 bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/30 group-hover:shadow-pink-500/50 transition-all overflow-hidden">
+                                                {page.profile_picture_url && isConnected ? (
+                                                  <img 
+                                                    src={page.profile_picture_url} 
+                                                    alt={page.username}
+                                                    className="w-full h-full object-cover"
+                                                  />
+                                                ) : (
+                                                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                                  </svg>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <h3 className="font-bold text-gray-900 dark:text-white text-base truncate mb-0.5 group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
+                                                {page.name || page.username}
+                                              </h3>
+                                              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                {t('dashboard.pages.instagramAccount', 'Instagram Account')}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          {isConnected && (
+                                            <button
+                                              onClick={() => setPageToDisconnect({ pageId: page.id, provider: 'instagram', pageName: page.name || page.username })}
+                                              disabled={isProcessing}
+                                              className="absolute top-0 right-0 p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group/btn"
+                                              title={t('dashboard.pages.titleDisconnectPage', 'Disconnect page')}
+                                            >
+                                              <svg className="w-4 h-4 group-hover/btn:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          )}
+                                        </div>
+
+                                        <div className="flex items-center justify-between gap-3">
+                                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-pink-100 via-purple-100 to-orange-100 dark:from-pink-900/40 dark:via-purple-900/30 dark:to-orange-900/30 text-pink-700 dark:text-pink-300 border border-pink-200/50 dark:border-pink-700/50 shadow-sm">
+                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                            {t('dashboard.pages.connected', 'Connected')}
+                                          </span>
+                                          
+                                          {isConnected && (
+                                            <Link
+                                              href={`/dashboard/comments?pageId=${page.id}`}
+                                              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 hover:from-purple-700 hover:via-pink-700 hover:to-orange-700 text-white rounded-lg transition-all duration-200 font-semibold text-xs whitespace-nowrap shadow-lg shadow-pink-500/25 hover:shadow-xl hover:shadow-pink-500/40 hover:scale-105 transform"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                              </svg>
+                                              {t('dashboard.pages.viewComments', 'View Comments')}
+                                            </Link>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              
+                            </div>
+                          ) : (
+                            <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-pink-50/30 dark:from-gray-900 dark:to-pink-950/20 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
+                              <div className="w-16 h-16 mx-auto mb-4 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('dashboard.pages.noInstagramAccountsAvailable', 'No Instagram accounts available')}</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1292,7 +1629,7 @@ export default function PagesPage() {
                         onClick={() => fetchData(true)}
                         className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm"
                       >
-                        Refresh Pages
+                        {t('dashboard.pages.refreshPages', 'Refresh Pages')}
                       </button>
                     </div>
                   </div>
@@ -1302,6 +1639,65 @@ export default function PagesPage() {
           </div>
         </main>
       </div>
+
+      {/* Confirmation Dialog for Disconnecting Pages */}
+      {pageToDisconnect && (
+        <>
+          <div 
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" 
+            onClick={() => setPageToDisconnect(null)}
+          ></div>
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {t('dashboard.pages.disconnectPageTitle', 'Disconnect Page?')}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {t('dashboard.pages.disconnectPageConfirm', 'Are you sure you want to disconnect {{pageName}}?', { pageName: pageToDisconnect.pageName })}
+                </p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              {t('dashboard.pages.disconnectPageDescription', 'This will stop monitoring comments from this page. You can reconnect it anytime.')}
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setPageToDisconnect(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                {t('dashboard.pages.cancel', 'Cancel')}
+              </button>
+              <button
+                onClick={async () => {
+                  if (pageToDisconnect) {
+                    await disconnectPage(pageToDisconnect.pageId, pageToDisconnect.provider);
+                    setPageToDisconnect(null);
+                  }
+                }}
+                disabled={disconnecting === pageToDisconnect?.pageId}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {disconnecting === pageToDisconnect?.pageId ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    {t('dashboard.pages.disconnecting', 'Disconnecting...')}
+                  </>
+                ) : (
+                  t('dashboard.pages.disconnect', 'Disconnect')
+                )}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

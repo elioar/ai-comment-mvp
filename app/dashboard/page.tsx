@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSession, signOut, signIn } from 'next-auth/react';
@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const [connectedPages, setConnectedPages] = useState<any[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
   const [hasFacebookAccount, setHasFacebookAccount] = useState(false);
+  const hasAutoFetchedComments = useRef<string | null>(null); // Track by user ID
 
   // Mount component to avoid hydration mismatch
   useEffect(() => {
@@ -64,6 +65,63 @@ export default function DashboardPage() {
       fetchConnectedPages();
     }
   }, [session]);
+
+  // Auto-fetch comments for all connected pages after login
+  useEffect(() => {
+    const currentUserId = session?.user?.id;
+    
+    // Reset flag when user changes (new login)
+    if (currentUserId && hasAutoFetchedComments.current !== currentUserId) {
+      hasAutoFetchedComments.current = null;
+    }
+    
+    if (
+      currentUserId &&
+      !loadingPages &&
+      connectedPages.length > 0 &&
+      hasAutoFetchedComments.current !== currentUserId
+    ) {
+      hasAutoFetchedComments.current = currentUserId;
+      
+      // Fetch comments for all connected pages in the background
+      const autoFetchComments = async () => {
+        console.log(`🔄 Auto-fetching comments for ${connectedPages.length} connected page(s)...`);
+        
+        // Fetch comments for each connected page in parallel (background mode)
+        const fetchPromises = connectedPages.map(async (page) => {
+          try {
+            // Use background=true to fetch without blocking the UI
+            const response = await fetch(
+              `/api/facebook/comments?pageId=${page.pageId}&background=true`
+            );
+            
+            if (response.ok) {
+              const data = await response.json();
+              console.log(
+                `✅ Auto-fetched comments for "${page.pageName}" - ${data.comments?.length || 0} comments loaded`
+              );
+            } else {
+              console.warn(
+                `⚠️ Failed to auto-fetch comments for "${page.pageName}": ${response.status}`
+              );
+            }
+          } catch (error) {
+            console.error(
+              `❌ Error auto-fetching comments for "${page.pageName}":`,
+              error
+            );
+          }
+        });
+
+        // Wait for all fetches to complete (but don't block UI)
+        await Promise.allSettled(fetchPromises);
+        console.log('✅ Auto-fetch completed for all connected pages');
+      };
+
+      // Start fetching in the background (don't await)
+      autoFetchComments();
+    }
+  }, [session, loadingPages, connectedPages]);
 
   if (status === 'loading') {
     return (
