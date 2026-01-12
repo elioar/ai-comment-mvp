@@ -25,9 +25,7 @@ export async function analyzeCommentSentiment(
 ): Promise<'positive' | 'neutral' | 'negative' | null> {
   // Skip if no API key is configured
   const client = getOpenAIClient();
-  if (!client) {
-    console.warn('OpenAI API key not configured. Skipping sentiment analysis.');
-    return null;
+  if (!client) {    return null;
   }
 
   // Skip empty or very short messages
@@ -50,17 +48,11 @@ export async function analyzeCommentSentiment(
     const hasPositive = positiveEmojis.some(emoji => text.includes(emoji));
     const hasNegative = negativeEmojis.some(emoji => text.includes(emoji));
     
-    if (hasPositive && !hasNegative) {
-      console.log('[Sentiment Analysis] Emoji-only comment detected: positive');
-      return 'positive';
+    if (hasPositive && !hasNegative) {      return 'positive';
     }
-    if (hasNegative && !hasPositive) {
-      console.log('[Sentiment Analysis] Emoji-only comment detected: negative');
-      return 'negative';
+    if (hasNegative && !hasPositive) {      return 'negative';
     }
-    // Mixed or neutral emojis
-    console.log('[Sentiment Analysis] Emoji-only comment detected: neutral');
-    return 'neutral';
+    // Mixed or neutral emojis    return 'neutral';
   }
 
   // 2. Very short positive responses (English & Greek)
@@ -70,9 +62,7 @@ export async function analyzeCommentSentiment(
     'ευχαριστώ', 'ευχαριστω', 'efharisto', 'efxaristo', 'kala', 'καλα', 'καλά', 'ωραια', 'ωραία', 
     'wraia', 'οκ', 'ναι', 'nai', 'τέλειο', 'τελειο', 'teleio', 'bravo', 'μπράβο', 'μπραβο'
   ];
-  if (cleanText.length <= 15 && shortPositive.some(word => cleanText === word || cleanText === word + '!' || cleanText === word + '!!')) {
-    console.log('[Sentiment Analysis] Short positive response detected:', cleanText);
-    return 'positive';
+  if (cleanText.length <= 15 && shortPositive.some(word => cleanText === word || cleanText === word + '!' || cleanText === word + '!!')) {    return 'positive';
   }
 
   // 3. Very short negative responses (English & Greek)
@@ -80,9 +70,7 @@ export async function analyzeCommentSentiment(
     'no', 'nope', 'bad', 'terrible', 'awful', 'hate', 'worst', 'disappointed', 'horrible',
     'όχι', 'oxi', 'οχι', 'κακό', 'κακο', 'kako', 'άσχημο', 'ασχημο', 'asxhmo'
   ];
-  if (cleanText.length <= 15 && shortNegative.some(word => cleanText === word || cleanText === word + '!' || cleanText === word + '!!')) {
-    console.log('[Sentiment Analysis] Short negative response detected:', cleanText);
-    return 'negative';
+  if (cleanText.length <= 15 && shortNegative.some(word => cleanText === word || cleanText === word + '!' || cleanText === word + '!!')) {    return 'negative';
   }
 
   // 4. Very short neutral responses
@@ -90,21 +78,15 @@ export async function analyzeCommentSentiment(
     'ok', 'k', 'hmm', 'hm', 'eh', 'meh', 'maybe', 'idk', 'dunno', 'what', 'where', 'when', 
     'how', 'why', 'who', 'which'
   ];
-  if (cleanText.length <= 8 && shortNeutral.includes(cleanText)) {
-    console.log('[Sentiment Analysis] Short neutral response detected:', cleanText);
-    return 'neutral';
+  if (cleanText.length <= 8 && shortNeutral.includes(cleanText)) {    return 'neutral';
   }
 
   // 5. Question-only comments (usually neutral unless clearly positive/negative)
-  if (text.includes('?') && text.trim().split(/\s+/).length <= 8) {
-    console.log('[Sentiment Analysis] Short question detected: neutral');
-    return 'neutral';
+  if (text.includes('?') && text.trim().split(/\s+/).length <= 8) {    return 'neutral';
   }
 
   // If none of the simple rules match, use AI for analysis
-  const previewText = cleanText.substring(0, 50) + (cleanText.length > 50 ? '...' : '');
-  console.log(`🤖 [AI] Using OpenAI API for: "${previewText}"`);
-  const aiStart = Date.now();
+  const previewText = cleanText.substring(0, 50) + (cleanText.length > 50 ? '...' : '');  const aiStart = Date.now();
 
   try {
     const completion = await client.chat.completions.create({
@@ -124,19 +106,9 @@ export async function analyzeCommentSentiment(
       max_tokens: 10, // GPT-4o-mini uses max_tokens (not max_completion_tokens)
     });
 
-    const aiTime = Date.now() - aiStart;
-    console.log(`⏱️  [AI] OpenAI API response received in ${aiTime}ms`);
-    console.log(`📊 [AI] Tokens used: ${completion.usage?.total_tokens || 'N/A'}`);
-
-    const response = completion.choices[0]?.message?.content
+    const aiTime = Date.now() - aiStart;    const response = completion.choices[0]?.message?.content
       ?.trim()
-      .toLowerCase();
-
-    console.log(`🔍 [AI] Raw response: "${response}"`);
-
-    if (!response) {
-      console.warn('⚠️  [AI] Empty sentiment response from OpenAI');
-      return null;
+      .toLowerCase();    if (!response) {      return null;
     }
 
     // Extract sentiment word more flexibly - handle cases where model adds punctuation or extra text
@@ -149,46 +121,14 @@ export async function analyzeCommentSentiment(
       sentiment === 'positive' ||
       sentiment === 'neutral' ||
       sentiment === 'negative'
-    ) {
-      console.log(`✅ [AI] Successfully classified as: ${sentiment}`);
-      return sentiment;
-    }
-
-    console.warn(`⚠️  [AI] Unexpected sentiment response: ${response}`);
-    return null;
+    ) {      return sentiment;
+    }    return null;
   } catch (error: any) {
-    const aiTime = Date.now() - aiStart;
-    console.error(`❌ [AI] OpenAI API call failed after ${aiTime}ms`);
-    
-    // Log error but don't throw - we don't want sentiment analysis to block comment fetching
-    if (error?.status === 429) {
-      console.error('❌ [OpenAI] RATE LIMIT EXCEEDED - Too many requests. Sentiment analysis paused temporarily.');
-      console.error('   → Solution: Wait a few minutes or upgrade your OpenAI plan for higher limits.');
-    } else if (error?.status === 401) {
-      console.error('❌ [OpenAI] AUTHENTICATION FAILED - Invalid or expired API key.');
-      console.error('   → Solution: Check your OPENAI_API_KEY in .env file.');
-    } else if (error?.status === 404) {
-      console.error('❌ [OpenAI] MODEL NOT FOUND - The specified model is not available.');
-      console.error(`   → Model: ${error?.message || 'gpt-4o-mini'}`);
-      console.error('   → Solution: Check if model name is correct or if you have access to it.');
-    } else if (error?.status === 500 || error?.status === 503) {
-      console.error('❌ [OpenAI] SERVER ERROR - OpenAI service is temporarily unavailable.');
-      console.error('   → This is an OpenAI issue, not your app. Try again in a few minutes.');
-    } else if (error?.status === 400) {
-      console.error('❌ [OpenAI] BAD REQUEST - Invalid parameters sent to API.');
-      console.error(`   → Error: ${error?.message || 'Unknown'}`);
-      if (error?.response) {
-        console.error('   → Details:', JSON.stringify(error.response, null, 2));
+    const aiTime = Date.now() - aiStart;    // Log error but don't throw - we don't want sentiment analysis to block comment fetching
+    if (error?.status === 429) {    } else if (error?.status === 401) {    } else if (error?.status === 404) {    } else if (error?.status === 500 || error?.status === 503) {    } else if (error?.status === 400) {      if (error?.response) {
       }
-    } else if (error?.code === 'ENOTFOUND' || error?.code === 'ECONNREFUSED') {
-      console.error('❌ [OpenAI] NETWORK ERROR - Cannot reach OpenAI servers.');
-      console.error('   → Check your internet connection.');
-    } else {
-      console.error('❌ [OpenAI] UNEXPECTED ERROR:', error?.message || error);
-      console.error('   → This sentiment will be skipped. Comments will still be fetched.');
-      // Log full error details for debugging
+    } else if (error?.code === 'ENOTFOUND' || error?.code === 'ECONNREFUSED') {    } else {      // Log full error details for debugging
       if (error?.response) {
-        console.error('   → API Response:', JSON.stringify(error.response, null, 2));
       }
     }
     return null;

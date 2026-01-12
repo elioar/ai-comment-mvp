@@ -50,7 +50,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
-    console.log('Toggling theme from', theme, 'to', newTheme);
     setTheme(newTheme);
     localStorage.setItem('theme', newTheme);
     
@@ -58,10 +57,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement;
     if (newTheme === 'dark') {
       root.classList.add('dark');
-      console.log('Added dark class to html element');
     } else {
       root.classList.remove('dark');
-      console.log('Removed dark class from html element');
     }
   };
 

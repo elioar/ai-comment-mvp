@@ -91,13 +91,7 @@ export async function GET(
       ? 'id,text,username,timestamp'
       : 'id,message,from,created_time';
 
-    const apiUrl = `https://graph.facebook.com/v24.0/${endpointPath}?access_token=${pageAccessToken}&fields=${fields}&limit=50`;
-
-    console.log(
-      `${isInstagram ? 'Instagram' : 'Facebook'}: Fetching replies for comment ${comment.commentId}`
-    );
-
-    const response = await fetch(apiUrl);
+    const apiUrl = `https://graph.facebook.com/v24.0/${endpointPath}?access_token=${pageAccessToken}&fields=${fields}&limit=50`;    const response = await fetch(apiUrl);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -137,9 +131,7 @@ export async function GET(
     });
 
     return NextResponse.json({ replies });
-  } catch (error: any) {
-    console.error('Error fetching replies for comment:', error);
-    return NextResponse.json(
+  } catch (error: any) {    return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     );
@@ -232,11 +224,7 @@ export async function PATCH(
     // Call Facebook/Instagram Graph API to hide/unhide comment
     const isHidden = action === 'hide';
     const isInstagram = comment.connectedPage.provider === 'instagram';
-    const apiUrl = `https://graph.facebook.com/v24.0/${comment.commentId}`;
-    
-    console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: ${isHidden ? 'Hiding' : 'Unhiding'} comment ${comment.commentId}`);
-
-    // Facebook comments use "is_hidden"; Instagram comments use "hide"
+    const apiUrl = `https://graph.facebook.com/v24.0/${comment.commentId}`;    // Facebook comments use "is_hidden"; Instagram comments use "hide"
     const form = new URLSearchParams();
     form.append('access_token', pageAccessToken);
     if (isInstagram) {
@@ -282,9 +270,7 @@ export async function PATCH(
       success: true,
       message: isHidden ? 'Comment hidden successfully' : 'Comment unhidden successfully',
     });
-  } catch (error: any) {
-    console.error('Error hiding/unhiding comment:', error);
-    return NextResponse.json(
+  } catch (error: any) {    return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     );
@@ -368,11 +354,7 @@ export async function DELETE(
 
     // Call Facebook Graph API to delete comment
     const isInstagram = comment.connectedPage.provider === 'instagram';
-    const apiUrl = `https://graph.facebook.com/v24.0/${comment.commentId}?access_token=${pageAccessToken}`;
-    
-    console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Deleting comment ${comment.commentId}`);
-    
-    const response = await fetch(apiUrl, {
+    const apiUrl = `https://graph.facebook.com/v24.0/${comment.commentId}?access_token=${pageAccessToken}`;    const response = await fetch(apiUrl, {
       method: 'DELETE',
     });
 
@@ -402,9 +384,7 @@ export async function DELETE(
       success: true,
       message: 'Comment deleted successfully',
     });
-  } catch (error: any) {
-    console.error('Error deleting comment:', error);
-    return NextResponse.json(
+  } catch (error: any) {    return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     );
@@ -503,13 +483,7 @@ export async function POST(
       ? `${comment.commentId}/replies`
       : `${comment.commentId}/comments`;
 
-    const apiUrl = `https://graph.facebook.com/v24.0/${endpointPath}`;
-
-    console.log(
-      `${isInstagram ? 'Instagram' : 'Facebook'}: Replying to comment ${comment.commentId}`
-    );
-
-    const form = new URLSearchParams();
+    const apiUrl = `https://graph.facebook.com/v24.0/${endpointPath}`;    const form = new URLSearchParams();
     form.append('access_token', pageAccessToken);
     form.append('message', message);
 
@@ -549,17 +523,13 @@ export async function POST(
         },
       });
     } catch (e) {
-      // Don't fail the request if this update fails; the reply already exists on Meta
-      console.error('Failed to update local comment reply state:', e);
-    }
+      // Don't fail the request if this update fails; the reply already exists on Meta    }
 
     return NextResponse.json({
       success: true,
       message: 'Reply sent successfully',
     });
-  } catch (error: any) {
-    console.error('Error replying to comment:', error);
-    return NextResponse.json(
+  } catch (error: any) {    return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     );

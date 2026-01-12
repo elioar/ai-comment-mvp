@@ -52,10 +52,7 @@ export async function DELETE(request: NextRequest) {
           provider: 'instagram',
         },
       });
-      totalDeletedPages += deletedIgPages.count;
-      
-      console.log(`[Disconnect] Deleted ${deletedFbPages.count} Facebook pages and ${deletedIgPages.count} Instagram pages for user ${session.user.id}`);
-    } else {
+      totalDeletedPages += deletedIgPages.count;    } else {
       // For other providers, only delete pages for that specific provider
       const deletedPages = await prisma.connectedPage.deleteMany({
         where: {
@@ -63,9 +60,7 @@ export async function DELETE(request: NextRequest) {
           provider: provider,
         },
       });
-      totalDeletedPages = deletedPages.count;
-      console.log(`[Disconnect] Deleted ${deletedPages.count} ${provider} pages for user ${session.user.id}`);
-    }
+      totalDeletedPages = deletedPages.count;    }
 
     // Delete the account
     await prisma.account.delete({
@@ -78,9 +73,7 @@ export async function DELETE(request: NextRequest) {
       success: true, 
       message: `${provider === 'facebook' ? 'Meta' : provider} account disconnected successfully` 
     });
-  } catch (error: any) {
-    console.error('Error disconnecting account:', error);
-    return NextResponse.json(
+  } catch (error: any) {    return NextResponse.json(
       { error: error.message || 'Failed to disconnect account' },
       { status: 500 }
     );

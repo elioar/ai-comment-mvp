@@ -17,12 +17,7 @@ export interface EmailOptions {
 export async function sendEmail({ to, subject, html }: EmailOptions) {
   // If no API key is set, log the email in development
   if (!resend || !process.env.RESEND_API_KEY) {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('📧 Email would be sent:');
-      console.log('To:', to);
-      console.log('Subject:', subject);
-      console.log('HTML:', html);
-    }
+    if (process.env.NODE_ENV === 'development') {    }
     return { success: true, id: 'dev-mode' };
   }
 
@@ -36,9 +31,7 @@ export async function sendEmail({ to, subject, html }: EmailOptions) {
     });
 
     return { success: true, id: result.data?.id };
-  } catch (error) {
-    console.error('Error sending email:', error);
-    throw new Error('Failed to send email');
+  } catch (error) {    throw new Error('Failed to send email');
   }
 }
 

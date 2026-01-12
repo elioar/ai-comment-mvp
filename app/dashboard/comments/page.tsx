@@ -137,9 +137,7 @@ function CommentsPageContent() {
             
             setAvailablePages(connectedPagesList);
           }
-        } catch (error) {
-          console.error('Error fetching pages:', error);
-        } finally {
+        } catch (error) {        } finally {
           setLoadingPages(false);
         }
       };
@@ -255,9 +253,7 @@ function CommentsPageContent() {
           setWarning(data.warning);
         }
         // Log debug info for troubleshooting
-        if (data.debug) {
-          console.log('[Comments] Debug info:', data.debug);
-        }
+        if (data.debug) {        }
         
         // Always start polling for updates (background fetch or not)
         // This ensures we catch new comments as they come in
@@ -273,9 +269,7 @@ function CommentsPageContent() {
         setError(t('dashboard.comments.failedToFetch'));
         setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-      setError(t('dashboard.comments.errorLoading'));
+    } catch (error) {      setError(t('dashboard.comments.errorLoading'));
       setLoading(false);
     }
   };
@@ -483,15 +477,11 @@ function CommentsPageContent() {
           setWarning(data.warning);
         }
         // Log debug info for troubleshooting
-        if (data.debug) {
-          console.log('[Comments] Debug info:', data.debug);
-        }
+        if (data.debug) {        }
       } else {
         setError(t('dashboard.comments.failedToRefresh'));
       }
-    } catch (error) {
-      console.error('Error refreshing comments:', error);
-      setError(t('dashboard.comments.errorRefreshing'));
+    } catch (error) {      setError(t('dashboard.comments.errorRefreshing'));
     } finally {
       setFetching(false);
     }
@@ -1712,6 +1702,15 @@ function CommentsPageContent() {
                             {comment.status === 'ignored' && (
                               <span className="px-2 py-0.5 bg-gray-100/80 dark:bg-gray-800/60 backdrop-blur-sm text-gray-600 dark:text-gray-400 rounded-xl text-xs font-medium shadow-sm">
                                 {t('dashboard.comments.hidden')}
+                              </span>
+                            )}
+                            {/* Ad Badge - Mobile */}
+                            {comment.isFromAd && (
+                              <span className="px-2 py-0.5 rounded-xl text-xs font-medium bg-yellow-100/80 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 flex items-center gap-1 shadow-sm backdrop-blur-sm" title={comment.adName || 'From Ad'}>
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                                </svg>
+                                Ad
                               </span>
                             )}
                             {/* Sentiment Badge - Mobile */}

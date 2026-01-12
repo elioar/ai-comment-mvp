@@ -57,7 +57,6 @@ export default function DashboardPage() {
           // Check if user has an active Facebook account (not just connected pages)
           setHasFacebookAccount(data.pages && data.pages.length > 0);
         } catch (error) {
-          console.error('Error fetching connected pages:', error);
         } finally {
           setLoadingPages(false);
         }
@@ -85,7 +84,6 @@ export default function DashboardPage() {
       
       // Fetch comments for all connected pages in the background
       const autoFetchComments = async () => {
-        console.log(`🔄 Auto-fetching comments for ${connectedPages.length} connected page(s)...`);
         
         // Fetch comments for each connected page in parallel (background mode)
         const fetchPromises = connectedPages.map(async (page) => {
@@ -97,25 +95,14 @@ export default function DashboardPage() {
             
             if (response.ok) {
               const data = await response.json();
-              console.log(
-                `✅ Auto-fetched comments for "${page.pageName}" - ${data.comments?.length || 0} comments loaded`
-              );
             } else {
-              console.warn(
-                `⚠️ Failed to auto-fetch comments for "${page.pageName}": ${response.status}`
-              );
             }
           } catch (error) {
-            console.error(
-              `❌ Error auto-fetching comments for "${page.pageName}":`,
-              error
-            );
           }
         });
 
         // Wait for all fetches to complete (but don't block UI)
         await Promise.allSettled(fetchPromises);
-        console.log('✅ Auto-fetch completed for all connected pages');
       };
 
       // Start fetching in the background (don't await)
@@ -584,7 +571,6 @@ export default function DashboardPage() {
                                 body: JSON.stringify({ userId: session.user.id }),
                               });
                             } catch (error) {
-                              console.error('Error storing linking user:', error);
                               // Still continue with OAuth even if storing fails
                             }
                           }

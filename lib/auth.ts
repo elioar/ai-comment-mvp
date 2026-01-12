@@ -60,9 +60,7 @@ export const authOptions = {
             email: user.email,
             image: user.image || undefined, // Convert null to undefined
           };
-        } catch (error) {
-          console.error('Authorization error:', error);
-          return null;
+        } catch (error) {          return null;
         }
       },
     }),
@@ -103,44 +101,26 @@ export const authOptions = {
           const linkingUserId = cookieStore.get('linking_user_id')?.value;
           
           // Exchange short-lived token for long-lived token (60 days) immediately
-          let longLivedToken = account.access_token;
-          console.log('[signIn callback] Starting Facebook token exchange for user:', linkingUserId);
-          console.log('[signIn callback] Original token length:', account.access_token?.length || 0);
-          
-          try {
+          let longLivedToken = account.access_token;          try {
             const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${account.access_token}`;
-            console.log('[signIn callback] Exchanging token at:', tokenExchangeUrl.replace(account.access_token || '', '[TOKEN]'));
             
             const tokenResponse = await fetch(tokenExchangeUrl);
             
             if (tokenResponse.ok) {
               const tokenData = await tokenResponse.json();
-              longLivedToken = tokenData.access_token;
-              console.log('[signIn callback] ✅ Successfully exchanged Facebook token for long-lived token');
-              console.log('[signIn callback] Long-lived token length:', longLivedToken?.length || 0);
-              
-              // Note: We can't mutate account.access_token directly (it's read-only)
+              longLivedToken = tokenData.access_token;              // Note: We can't mutate account.access_token directly (it's read-only)
               // We'll update it in the database after NextAuth saves the account
             } else {
-              const errorText = await tokenResponse.text();
-              console.error('[signIn callback] ❌ Failed to exchange Facebook token:', errorText);
-              console.error('[signIn callback] Response status:', tokenResponse.status);
-              // Continue with short-lived token - we'll try to exchange it later
+              const errorText = await tokenResponse.text();              // Continue with short-lived token - we'll try to exchange it later
             }
-          } catch (tokenError) {
-            console.error('[signIn callback] ❌ Error exchanging Facebook token:', tokenError);
-            // Continue with short-lived token
+          } catch (tokenError) {            // Continue with short-lived token
           }
           
           if (linkingUserId && linkingUserId !== user.id) {
             // Store the new user ID before we change it (this is the duplicate created by OAuth)
             const newUserId = user.id;
 
-            // Link the Facebook account to the original user immediately with long-lived token
-            console.log('[signIn callback] Linking Facebook account to user:', linkingUserId);
-            console.log('[signIn callback] Provider account ID:', account.providerAccountId);
-            
-            const updateResult = await prisma.account.updateMany({
+            // Link the Facebook account to the original user immediately with long-lived token            const updateResult = await prisma.account.updateMany({
               where: {
                 providerAccountId: account.providerAccountId,
                 provider: 'facebook',
@@ -149,11 +129,7 @@ export const authOptions = {
                 userId: linkingUserId,
                 access_token: longLivedToken, // Store the long-lived token
               },
-            });
-            
-            console.log('[signIn callback] Account update result:', updateResult.count, 'rows updated');
-
-            // Get the original user to update the user object
+            });            // Get the original user to update the user object
             const originalUser = await prisma.user.findUnique({
               where: { id: linkingUserId },
             });
@@ -169,18 +145,12 @@ export const authOptions = {
               try {
                 await prisma.user.delete({
                   where: { id: newUserId },
-                });
-                console.log('Linked Facebook account to existing user:', originalUser.email);
-              } catch (deleteError) {
-                // User might have dependencies, that's okay
-                console.log('Could not delete duplicate user, but account is linked');
-              }
+                });              } catch (deleteError) {
+                // User might have dependencies, that's okay              }
             }
           } else if (linkingUserId && linkingUserId === user.id) {
             // Account already linked to this user (reconnection scenario)
-            // Just update the token
-            console.log('[signIn callback] Reconnection scenario - updating token for existing account');
-            const updateResult = await prisma.account.updateMany({
+            // Just update the token            const updateResult = await prisma.account.updateMany({
               where: {
                 providerAccountId: account.providerAccountId,
                 provider: 'facebook',
@@ -189,14 +159,8 @@ export const authOptions = {
               data: {
                 access_token: longLivedToken, // Update with long-lived token
               },
-            });
-            console.log('[signIn callback] Token update result:', updateResult.count, 'rows updated');
-          } else {
-            console.log('[signIn callback] No linking user ID found, account will be created normally');
-          }
-        } catch (error) {
-          console.error('Error in signIn callback during account linking:', error);
-        }
+            });          } else {          }
+        } catch (error) {        }
       }
       
       return true;
@@ -209,9 +173,7 @@ export const authOptions = {
           // keep the original token to preserve the session
           if (token.id && account?.provider === 'facebook' && user.id === token.id) {
             // The signIn callback already linked the account and updated user.id to original user
-            // Just keep the existing token to preserve the session
-            console.log('Preserving original user session during Facebook linking:', token.id);
-            return token;
+            // Just keep the existing token to preserve the session            return token;
           }
           
           // Normal sign-in - update token with user info
@@ -220,9 +182,7 @@ export const authOptions = {
           token.email = user.email;
         }
         return token;
-      } catch (error) {
-        console.error('JWT callback error:', error);
-        return token;
+      } catch (error) {        return token;
       }
     },
     async session({ session, token }: { session: Session; token: JWT }) {
@@ -233,9 +193,7 @@ export const authOptions = {
           session.user.email = token.email as string;
         }
         return session;
-      } catch (error) {
-        console.error('Session callback error:', error);
-        return session;
+      } catch (error) {        return session;
       }
     },
   },
@@ -243,12 +201,7 @@ export const authOptions = {
     async signIn(message: { user: User; account?: any; profile?: any; isNewUser?: boolean }) {
       // If this is Facebook OAuth, ensure the token in database is long-lived
       // This runs AFTER NextAuth's PrismaAdapter has saved the account
-      if (message.account?.provider === 'facebook' && message.account?.access_token) {
-        console.log('[events.signIn] Facebook OAuth completed for user:', message.user.id);
-        console.log('[events.signIn] Is new user:', message.isNewUser);
-        console.log('[events.signIn] Account provider ID:', message.account.providerAccountId);
-        
-        try {
+      if (message.account?.provider === 'facebook' && message.account?.access_token) {        try {
           // Find the account that was just created/updated by NextAuth
           const savedAccount = await prisma.account.findFirst({
             where: {
@@ -258,16 +211,9 @@ export const authOptions = {
             },
           });
 
-          if (savedAccount) {
-            console.log('[events.signIn] Found saved account in database');
-            console.log('[events.signIn] Saved token length:', savedAccount.access_token?.length || 0);
-            console.log('[events.signIn] Original token length:', message.account.access_token?.length || 0);
-            
-            // Check if the stored token is the same as the original (short-lived) token
+          if (savedAccount) {            // Check if the stored token is the same as the original (short-lived) token
             // This means the exchange in signIn callback might have failed
-            if (savedAccount.access_token === message.account.access_token) {
-              console.log('[events.signIn] Token appears to be short-lived, attempting exchange...');
-              // Token wasn't exchanged in signIn callback, try now
+            if (savedAccount.access_token === message.account.access_token) {              // Token wasn't exchanged in signIn callback, try now
               try {
                 const tokenExchangeUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${message.account.access_token}`;
                 const tokenResponse = await fetch(tokenExchangeUrl);
@@ -282,34 +228,16 @@ export const authOptions = {
                     data: { access_token: longLivedToken },
                   });
                   
-                  console.log('[events.signIn] ✅ Updated Facebook token to long-lived (backup)');
                 } else {
-                  const errorText = await tokenResponse.text();
-                  console.error('[events.signIn] ❌ Failed to exchange token:', errorText);
-                }
-              } catch (tokenError) {
-                console.error('[events.signIn] ❌ Error exchanging token:', tokenError);
-              }
-            } else {
-              console.log('[events.signIn] ✅ Token already exchanged in signIn callback, skipping');
-            }
-          } else {
-            console.log('[events.signIn] ⚠️ Account not found in database yet');
-          }
-        } catch (error) {
-          console.error('[events.signIn] ❌ Error in signIn event:', error);
-        }
+                  const errorText = await tokenResponse.text();                }
+              } catch (tokenError) {              }
+            } else {            }
+          } else {          }
+        } catch (error) {        }
       }
       
       // Log successful sign-ins in development
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Sign in successful:', { 
-          userId: message.user.id, 
-          email: message.user.email, 
-          isNewUser: message.isNewUser,
-          provider: message.account?.provider
-        });
-      }
+      if (process.env.NODE_ENV === 'development') {      }
     },
     async signOut() {
       // Handle sign out if needed

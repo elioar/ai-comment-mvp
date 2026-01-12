@@ -72,28 +72,20 @@ export default function OnboardingPage() {
   }, [session, currentStep]);
 
   const refreshTokenAndFetchPages = async () => {
-    try {
-      console.log('Refreshing token and fetching pages...');
-      // Try to refresh the token first
+    try {      // Try to refresh the token first
       const refreshResponse = await fetch('/api/facebook/refresh-token', {
         method: 'POST',
       });
       
-      if (refreshResponse.ok) {
-        console.log('Token refreshed successfully');
-      } else {
-        const refreshData = await refreshResponse.json();
-        console.log('Token refresh response:', refreshData);
-      }
+      if (refreshResponse.ok) {      } else {
+        const refreshData = await refreshResponse.json();      }
       
       // Wait a bit for token to be saved
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Then fetch pages
       await checkFacebookConnection();
-    } catch (error) {
-      console.error('Error refreshing token:', error);
-      // Still try to fetch pages even if refresh fails
+    } catch (error) {      // Still try to fetch pages even if refresh fails
       await checkFacebookConnection();
     }
   };
@@ -101,26 +93,13 @@ export default function OnboardingPage() {
   const checkFacebookConnection = async () => {
     setLoading(true);
     setError(null);
-    try {
-      console.log('Fetching Facebook pages from API...');
-      const response = await fetch('/api/facebook/pages');
-      const data = await response.json();
-      
-      console.log('API Response:', {
-        ok: response.ok,
-        pages: data.pages?.length || 0,
-        connectedPages: data.connectedPages?.length || 0,
-        error: data.error,
-      });
-      
-      // Always set connected pages (they're stored in DB)
+    try {      const response = await fetch('/api/facebook/pages');
+      const data = await response.json();      // Always set connected pages (they're stored in DB)
       setConnectedPages(data.connectedPages || []);
       
       // ALWAYS set pages if they exist, even if response is not ok
       if (data.pages && Array.isArray(data.pages)) {
-        setFbPages(data.pages);
-        console.log('Set Facebook pages:', data.pages.length);
-      }
+        setFbPages(data.pages);      }
       
       if (response.ok) {
         // Success - pages fetched
@@ -159,9 +138,7 @@ export default function OnboardingPage() {
           setError(data.error || 'Failed to fetch pages');
         }
       }
-    } catch (error) {
-      console.error('Error checking Facebook connection:', error);
-      // If we have connected pages, don't show error
+    } catch (error) {      // If we have connected pages, don't show error
       if (connectedPages.length > 0) {
         setFacebookConnected(true);
         setError(null);
@@ -183,9 +160,7 @@ export default function OnboardingPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: session.user.id }),
           });
-        } catch (error) {
-          console.error('Error storing linking user:', error);
-          // Still continue with OAuth even if storing fails
+        } catch (error) {          // Still continue with OAuth even if storing fails
         }
       }
       
@@ -193,9 +168,7 @@ export default function OnboardingPage() {
         callbackUrl: '/dashboard/onboarding?step=2',
         redirect: true 
       });
-    } catch (error) {
-      console.error('Facebook login error:', error);
-      setError('Failed to connect Facebook account');
+    } catch (error) {      setError('Failed to connect Facebook account');
     }
   };
 
@@ -227,9 +200,7 @@ export default function OnboardingPage() {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to connect page');
       }
-    } catch (error) {
-      console.error('Error connecting page:', error);
-      setError('Error connecting page');
+    } catch (error) {      setError('Error connecting page');
     } finally {
       setConnecting(null);
     }

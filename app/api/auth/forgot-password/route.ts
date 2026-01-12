@@ -51,9 +51,7 @@ export async function POST(request: NextRequest) {
     // Send password reset email
     try {
       await sendPasswordResetEmail(email, token, user.name || undefined);
-    } catch (emailError) {
-      console.error('Failed to send password reset email:', emailError);
-      // Don't fail the request if email fails, but log it
+    } catch (emailError) {      // Don't fail the request if email fails, but log it
       // In development, the email will be logged to console
     }
 
@@ -61,9 +59,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'If an account with that email exists, we sent a password reset link.',
     });
-  } catch (error) {
-    console.error('Password reset request error:', error);
-    return NextResponse.json(
+  } catch (error) {    return NextResponse.json(
       { success: false, message: 'Failed to send reset link. Please try again.' },
       { status: 500 }
     );

@@ -20,7 +20,7 @@ async function fetchAdsComments(
 
   try {
     const platform = isInstagram ? 'Instagram' : 'Facebook';
-    console.log(`📢 [${platform} Ads] Starting to fetch comments from ads...`);
+    console.log(`🔍 [${platform} Ad Comments] Starting fetch for Ad Account: ${adAccountId}`);
 
     // Marketing API (ads list) generally requires a USER access token with ads_read.
     const account = await prisma.account.findFirst({
@@ -35,58 +35,65 @@ async function fetchAdsComments(
 
     const marketingAccessToken = account?.access_token;
     if (!marketingAccessToken) {
-      console.error(`❌ [${platform} Ads] No access token found. Cannot fetch ad comments.`);
+      console.log(`⚠️  [${platform} Ad Comments] No marketing access token found - skipping ad comments`);
       return { newCommentsCount, totalCommentsFetched };
     }
     
     // Normalize ad account id (people often paste "act_123...", while our code adds "act_" itself)
     const normalizedAdAccountId = String(adAccountId || '').trim().replace(/^act_/i, '');
     if (!normalizedAdAccountId) {
-      console.error(`❌ [${platform} Ads] Invalid ad account ID: ${adAccountId}`);
+      console.log(`⚠️  [${platform} Ad Comments] Invalid ad account ID - skipping ad comments`);
       return { newCommentsCount, totalCommentsFetched };
     }
 
-    console.log(`📢 [${platform} Ads] Fetching ads from account: ${normalizedAdAccountId}`);
 
     // Fetch ads from the ad account
     // Ads comments are comments on the post/media behind the ad.
     // Facebook: creative.effective_object_story_id (fallback: creative.object_story_id) => /{post_id}/comments
     // Instagram: effective_instagram_media_id (Marketing API) => /{ig_media_id}/comments
     const adsFields = isInstagram
-      ? 'id,name,effective_instagram_media_id,status,effective_status'
-      : 'id,name,creative{effective_object_story_id,object_story_id},status,effective_status';
+      ? 'id,name,effective_instagram_media_id,creative{effective_instagram_media_id,object_story_spec},status,effective_status,permalink_url'
+      : 'id,name,creative{effective_object_story_id,object_story_id},status,effective_status,permalink_url';
 
-    // Include more ad statuses to catch ads that might have comments
-    // ACTIVE and PAUSED are the main ones, but also include others that might still have comments
-    const filtering = encodeURIComponent(
-      JSON.stringify([{ field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED', 'PENDING_REVIEW', 'DISAPPROVED'] }])
-    );
-    const adsUrl = `https://graph.facebook.com/v24.0/act_${normalizedAdAccountId}/ads?access_token=${marketingAccessToken}&fields=${encodeURIComponent(adsFields)}&limit=100&filtering=${filtering}`;
+    // First, fetch ALL ads to see what we have (for debugging)
+    const allAdsUrl = `https://graph.facebook.com/v24.0/act_${normalizedAdAccountId}/ads?access_token=${marketingAccessToken}&fields=${encodeURIComponent(adsFields)}&limit=100`;
+    const allAdsResponse = await fetch(allAdsUrl);
     
-    console.log(`📢 [${platform} Ads] Fetching ads with filter: ACTIVE, PAUSED, PENDING_REVIEW, DISAPPROVED`);
-    const adsResponse = await fetch(adsUrl);
-    
-    if (!adsResponse.ok) {
-      const errorText = await adsResponse.text();
-      console.error(`❌ [${platform} Ads] Failed to fetch ads list: ${errorText.substring(0, 300)}`);
+    if (!allAdsResponse.ok) {
+      const errorText = await allAdsResponse.text();
+      console.log(`❌ [${platform} Ad Comments] Failed to fetch ads: ${errorText.substring(0, 200)}`);
       return { newCommentsCount, totalCommentsFetched };
     }
     
-    const adsData = await adsResponse.json();
-    const ads = adsData.data || [];
+    const allAdsData = await allAdsResponse.json();
+    const allAds = allAdsData.data || [];
     
-    console.log(`📢 [${platform} Ads] Found ${ads.length} ad(s) in the account`);
-    
-    // Log ad details for debugging
-    if (ads.length > 0) {
-      console.log(`📋 [${platform} Ads] Ad list:`);
-      ads.slice(0, 5).forEach((ad: any) => {
-        console.log(`   - "${ad.name || ad.id}" (ID: ${ad.id}, Status: ${ad.effective_status || ad.status})`);
+    // Log all ads with their statuses
+    if (allAds.length > 0) {
+      console.log(`📊 [${platform} Ads] Ad Account: act_${normalizedAdAccountId} | Found ${allAds.length} total ads`);
+      allAds.forEach((ad: any) => {
+        const permalink = ad.permalink_url || 'N/A';
+        console.log(`   - Ad ID: ${ad.id} | Name: ${ad.name || 'N/A'} | Status: ${ad.status || 'N/A'} | Effective Status: ${ad.effective_status || 'N/A'} | Link: ${permalink}`);
       });
-      if (ads.length > 5) {
-        console.log(`   ... and ${ads.length - 5} more ad(s)`);
+      
+      // Filter for only ACTIVE ads
+      const ads = allAds.filter((ad: any) => ad.effective_status === 'ACTIVE');
+      console.log(`📢 [${platform} Ads] Ad Account: act_${normalizedAdAccountId} | Found ${ads.length} ACTIVE ads (filtered from ${allAds.length} total)`);
+      
+      if (ads.length === 0 && allAds.length > 0) {
+        const statusCounts: Record<string, number> = {};
+        allAds.forEach((ad: any) => {
+          const status = ad.effective_status || 'UNKNOWN';
+          statusCounts[status] = (statusCounts[status] || 0) + 1;
+        });
+        console.log(`⚠️  [${platform} Ads] Ad Account: act_${normalizedAdAccountId} | No ACTIVE ads found. Status breakdown:`, statusCounts);
       }
+    } else {
+      console.log(`ℹ️  [${platform} Ads] Ad Account: act_${normalizedAdAccountId} | No ads found at all`);
     }
+    
+    // Filter for only ACTIVE ads
+    const ads = allAds.filter((ad: any) => ad.effective_status === 'ACTIVE');
     
     // Process ads in batches
     const batchSize = 5;
@@ -104,16 +111,16 @@ async function fetchAdsComments(
           }
           
           if (!targetId) {
-            // This ad doesn't have a post/media we can fetch comments from
-            const platform = isInstagram ? 'Instagram' : 'Facebook';
-            console.log(`⚠️  [${platform} Ads] Ad "${ad.name || ad.id}" has no post/media ID - skipping (this is normal for some ad types)`);
             return { ad, comments: [], error: null };
           }
           
           // Fetch comments for this ad's post/media (comments are on the underlying object, not a separate "ads comments" API)
           // Try with page access token first (preferred), then fallback to user token if needed
           const commentFields = isInstagram ? 'id,text,username,timestamp' : 'id,message,from,created_time';
-          let commentsUrl = `https://graph.facebook.com/v24.0/${targetId}/comments?access_token=${pageAccessToken}&fields=${commentFields}&limit=50`;
+          
+          // Build base URL
+          const baseCommentsUrl = `https://graph.facebook.com/v24.0/${targetId}/comments?access_token=${pageAccessToken}&fields=${commentFields}&limit=50`;
+          let commentsUrl = baseCommentsUrl;
           
           if (fetchSince) {
             const sinceTimestamp = Math.floor(fetchSince.getTime() / 1000);
@@ -121,6 +128,7 @@ async function fetchAdsComments(
           }
           
           let commentsResponse = await fetch(commentsUrl);
+          let useUserToken = false;
           
           // If page token fails with permission error, try with user token as fallback
           if (!commentsResponse.ok) {
@@ -129,9 +137,7 @@ async function fetchAdsComments(
             
             // Check if it's a permission error (code 10) and try user token
             if (errorData.error?.code === 10 && marketingAccessToken) {
-              const platform = isInstagram ? 'Instagram' : 'Facebook';
-              console.log(`⚠️  [${platform} Ads] Page token failed for ad "${ad.name || ad.id}", trying user token...`);
-              
+              useUserToken = true;
               commentsUrl = `https://graph.facebook.com/v24.0/${targetId}/comments?access_token=${marketingAccessToken}&fields=${commentFields}&limit=50`;
               if (fetchSince) {
                 const sinceTimestamp = Math.floor(fetchSince.getTime() / 1000);
@@ -148,8 +154,37 @@ async function fetchAdsComments(
             }
           }
           
-          const commentsData = await commentsResponse.json();
-          return { ad, comments: commentsData.data || [], error: null };
+          // Fetch all comments with pagination
+          let allComments: any[] = [];
+          let nextUrl: string | null = null;
+          let pageCount = 0;
+          
+          do {
+            if (nextUrl) {
+              commentsResponse = await fetch(nextUrl);
+              if (!commentsResponse.ok) {
+                break;
+              }
+            }
+            
+            const commentsData = await commentsResponse.json();
+            const pageComments = commentsData.data || [];
+            allComments = [...allComments, ...pageComments];
+            pageCount++;
+            
+            // Get next page URL from pagination
+            nextUrl = commentsData.paging?.next || null;
+            
+            if (nextUrl && pageComments.length > 0) {
+              console.log(`📄 [${platform} Ad Comments] Ad ID: ${ad.id} | Fetched page ${pageCount} with ${pageComments.length} comments (total so far: ${allComments.length})`);
+            }
+          } while (nextUrl);
+          
+          if (pageCount > 1) {
+            console.log(`📚 [${platform} Ad Comments] Ad ID: ${ad.id} | Completed pagination: ${pageCount} pages, ${allComments.length} total comments`);
+          }
+          
+          return { ad, comments: allComments, error: null };
         } catch (error) {
           return { ad, comments: [], error };
         }
@@ -160,14 +195,14 @@ async function fetchAdsComments(
       // Process comments from ads
       for (const { ad, comments, error } of batchResults) {
         if (error) {
-          console.error(`❌ [${platform} Ads] Error fetching comments for ad "${ad.name || ad.id}":`, error);
+          console.log(`⚠️  [${platform} Ad Comments] Error fetching comments for Ad ID ${ad.id}: ${error}`);
           continue;
         }
         
         totalCommentsFetched += comments.length;
         
         if (comments.length > 0) {
-          console.log(`💬 [${platform} Ads] Found ${comments.length} comment(s) on ad: "${ad.name || ad.id}"`);
+          console.log(`📝 [${platform} Ad Comments] Ad ID: ${ad.id} | Found ${comments.length} comment(s)`);
         }
         
         for (const comment of comments) {
@@ -190,6 +225,10 @@ async function fetchAdsComments(
           }
           
           const shouldProcess = !fetchSince || commentCreatedAt > fetchSince;
+          
+          if (!shouldProcess) {
+            console.log(`⏭️  [${platform} Ad Comments] Skipping old comment from Ad ID ${ad.id} (created: ${commentCreatedAt.toISOString()}, fetchSince: ${fetchSince?.toISOString() || 'none'})`);
+          }
           
           if (shouldProcess) {
             const postId = isInstagram
@@ -225,6 +264,33 @@ async function fetchAdsComments(
               },
             });
             
+            // Log ad comment fetch
+            const platform = isInstagram ? 'Instagram' : 'Facebook';
+            const mediaId = postId || 'N/A';
+            const commentPreview = commentMessage.substring(0, 100) + (commentMessage.length > 100 ? '...' : '');
+            
+            // Construct ad link
+            let adLink: string;
+            if (ad.permalink_url) {
+              adLink = ad.permalink_url;
+            } else if (isInstagram && mediaId && mediaId !== 'N/A') {
+              // Instagram media link format
+              adLink = `https://www.instagram.com/p/${mediaId}/`;
+            } else if (!isInstagram && mediaId && mediaId !== 'N/A') {
+              // Facebook post link format: pageId_postId
+              const parts = mediaId.split('_');
+              if (parts.length === 2) {
+                adLink = `https://www.facebook.com/${parts[0]}/posts/${parts[1]}`;
+              } else {
+                adLink = `https://www.facebook.com/ads/library/?id=${ad.id}`;
+              }
+            } else {
+              // Fallback to Ad Library link
+              adLink = `https://www.facebook.com/ads/library/?id=${ad.id}`;
+            }
+            
+            console.log(`📢 [${platform} Ad Comment] Ad Account: act_${normalizedAdAccountId} | Ad ID: ${ad.id} | Media/Post ID: ${mediaId} | Ad Link: ${adLink} | ${authorName}: ${commentPreview}`);
+            
             // Analyze sentiment if not already set
             if (!savedComment.sentiment) {
               const sentiment = await analyzeCommentSentiment(commentMessage);
@@ -243,13 +309,12 @@ async function fetchAdsComments(
     }
     
     if (totalCommentsFetched > 0) {
-      console.log(`✅ [${platform} Ads] Completed: ${totalCommentsFetched} total comment(s) found, ${newCommentsCount} new comment(s) saved`);
+      console.log(`✅ [${platform} Ad Comments] Completed: ${newCommentsCount} new comments saved, ${totalCommentsFetched} total comments fetched`);
     } else {
-      console.log(`ℹ️  [${platform} Ads] No comments found on any ads`);
+      console.log(`ℹ️  [${platform} Ad Comments] No comments found in ads`);
     }
   } catch (error) {
-    const platform = isInstagram ? 'Instagram' : 'Facebook';
-    console.error(`❌ [${platform} Ads] Error while fetching ad comments:`, error);
+    console.error(`❌ [${platform} Ad Comments] Error:`, error);
   }
   
   return { newCommentsCount, totalCommentsFetched };
@@ -277,11 +342,9 @@ export async function fetchCommentsInBackground(
         });
         
         if (!account?.access_token) {
-          console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: No user access token found`);
           return null;
         }
         
-        console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Refreshing page token...`);
         
         let targetPageId = pageId;
         let facebookPageId: string | null = null;
@@ -354,10 +417,8 @@ export async function fetchCommentsInBackground(
               data: { pageAccessToken: page.access_token },
             });
             
-            console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Token refreshed successfully`);
             return page.access_token;
           } else {
-            console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Page not found when refreshing token`);
           }
         } else {
           const errorText = await pagesResponse.text();
@@ -368,17 +429,13 @@ export async function fetchCommentsInBackground(
               const errorMessage = errorData.error.message || '';
               
               if (errorCode === 4) {
-                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Rate Limit: Cannot refresh token (code 4). Please wait and try again.`);
               } else {
-                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token refresh failed - ${errorMessage}`);
               }
             }
           } catch (parseError) {
-            console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Failed to refresh token`);
           }
         }
       } catch (error) {
-        console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception during token refresh`);
       }
       return null;
     };
@@ -407,7 +464,6 @@ export async function fetchCommentsInBackground(
         const postsData = await postsResponse.json();
         posts = postsData.data || [];
         postsFetchSuccess = true;
-        console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Found ${posts.length} ${isInstagram ? 'media' : 'posts'}`);
       } else {
         const errorText = await postsResponse.text();
         
@@ -420,13 +476,10 @@ export async function fetchCommentsInBackground(
             
             if (errorCode === 10 && !isInstagram) {
               hasErrorCode10 = true;
-              console.error(`Facebook Error: Permission blocked (code 10) - requires pages_read_engagement`);
             } else if (errorCode === 190 || errorCode === 200 || errorType === 'OAuthException') {
-              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token expired (code ${errorCode}) - ${errorMessage}`);
               
               // For Instagram, try to refresh token if it's a token error
               if (isInstagram) {
-                console.log(`Instagram: Attempting token refresh...`);
                 try {
                   const refreshedToken = await refreshPageAccessToken();
                   if (refreshedToken) {
@@ -440,25 +493,18 @@ export async function fetchCommentsInBackground(
                       const retryPostsData = await retryPostsResponse.json();
                       posts = retryPostsData.data || [];
                       postsFetchSuccess = true;
-                      console.log(`Instagram: Successfully fetched ${posts.length} media after token refresh`);
                     } else {
-                      console.error(`Instagram Error: Still failing after token refresh`);
                     }
                   } else {
-                    console.error(`Instagram Error: Token refresh failed`);
                   }
                 } catch (refreshError) {
-                  console.error(`Instagram Error: Exception during token refresh`);
                 }
               }
             } else if (errorCode === 4) {
-              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Rate Limit: ${errorMessage}`);
             } else {
-              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: ${errorMessage}`);
             }
           }
         } catch (e) {
-          console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Failed to fetch ${isInstagram ? 'media' : 'posts'}`);
         }
         
         // For Facebook, try /feed endpoint as fallback
@@ -492,12 +538,10 @@ export async function fetchCommentsInBackground(
           
           posts = existingComments.map(c => ({ id: c.postId }));
           if (posts.length > 0) {
-            console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Using ${posts.length} existing post IDs`);
           }
         }
       }
     } catch (error) {
-      console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception fetching ${isInstagram ? 'media' : 'posts'}`);
       // Try to get post IDs from existing comments
       const existingComments = await prisma.comment.findMany({
         where: {
@@ -519,7 +563,6 @@ export async function fetchCommentsInBackground(
     let skippedCommentsCount = 0;
     
     if (posts.length > 0) {
-      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Processing ${posts.length} ${isInstagram ? 'media' : 'posts'} for comments`);
     }
     
     // Fetch comments for all posts in parallel for better performance
@@ -612,16 +655,13 @@ export async function fetchCommentsInBackground(
                 
                 // Analyze sentiment if not already set
                 if (!savedComment.sentiment) {
-                  console.log(`[Comments API] Analyzing sentiment for comment ${savedComment.id}`);
                   const sentiment = await analyzeCommentSentiment(commentMessage);
                   if (sentiment) {
-                    console.log(`[Comments API] Sentiment analysis result: ${sentiment} for comment ${savedComment.id}`);
                     await prisma.comment.update({
                       where: { id: savedComment.id },
                       data: { sentiment },
                     });
                   } else {
-                    console.warn(`[Comments API] Sentiment analysis returned null for comment ${savedComment.id}`);
                   }
                 }
                 
@@ -671,7 +711,6 @@ export async function fetchCommentsInBackground(
       }
     }
 
-    console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: ${totalCommentsFetched} total comments, ${newCommentsCount} new, ${skippedCommentsCount} skipped`);
 
     // Fetch comments from ads (Facebook + Instagram)
     // Ads comments are comments on the post/media behind the ad.
@@ -694,7 +733,6 @@ export async function fetchCommentsInBackground(
       totalCommentsFetched += adsResult.totalCommentsFetched;
     } else {
       const platform = isInstagram ? 'Instagram' : 'Facebook';
-      console.log(`ℹ️  [${platform}] No ad account ID configured - skipping ad comments`);
     }
 
     // Update lastCommentsFetchedAt after successful comment fetch
@@ -709,20 +747,15 @@ export async function fetchCommentsInBackground(
       });
     }
   } catch (error) {
-    console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Background fetch failed:`, error);
   }
 }
 
 export async function GET(request: NextRequest) {
   const performanceStart = Date.now();
-  console.log('\n🚀 ═══════════════════════════════════════════════════════');
-  console.log('📊 [PERFORMANCE] Comment Fetch Request Started');
-  console.log('═══════════════════════════════════════════════════════');
   
   try {
     const authStart = Date.now();
     const session = await auth();
-    console.log(`⏱️  [METRIC] Auth check: ${Date.now() - authStart}ms`);
     
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -731,7 +764,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const pageId = searchParams.get('pageId');
     const background = searchParams.get('background') === 'true';
-    console.log(`🔧 [CONFIG] PageID: ${pageId}, Background: ${background}`);
 
     if (!pageId) {
       return NextResponse.json(
@@ -748,7 +780,6 @@ export async function GET(request: NextRequest) {
         pageId,
       },
     });
-    console.log(`⏱️  [METRIC] DB Query (ConnectedPage): ${Date.now() - dbQueryStart}ms`);
 
     if (!connectedPage) {
       return NextResponse.json(
@@ -772,7 +803,6 @@ export async function GET(request: NextRequest) {
     
     // If background mode, return cached comments immediately and start background fetch
     if (background) {
-      console.log('🔄 [MODE] Background fetch mode - returning cached data');
       const cacheStart = Date.now();
       // Get cached comments from database
       const storedComments = await prisma.comment.findMany({
@@ -792,8 +822,6 @@ export async function GET(request: NextRequest) {
         },
         take: 100,
       });
-      console.log(`⏱️  [METRIC] DB Query (Cached Comments): ${Date.now() - cacheStart}ms`);
-      console.log(`📦 [DATA] Loaded ${storedComments.length} cached comments`);
 
       // Fetch post messages, images, and dates for cached comments
       const postIds = [...new Set(storedComments.map(c => c.postId))];
@@ -801,7 +829,6 @@ export async function GET(request: NextRequest) {
       const postImages: Record<string, string> = {};
       const postCreatedAts: Record<string, string> = {};
       
-      console.log(`📋 [DATA] Fetching metadata for ${postIds.length} unique posts`);
       // Try to fetch post data (optional - don't fail if this doesn't work)
       const postMetadataStart = Date.now();
       const currentPageAccessToken = connectedPage.pageAccessToken;
@@ -831,7 +858,6 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-      console.log(`⏱️  [METRIC] Post metadata fetch: ${Date.now() - postMetadataStart}ms`);
 
       // Format cached comments
       const formattedComments = storedComments.map(comment => ({
@@ -870,15 +896,11 @@ export async function GET(request: NextRequest) {
           currentPageAccessTokenForBackground,
           fetchSince
         ).catch(error => {
-          console.error('Background fetch error:', error);
         });
       }
 
       // Return cached comments immediately
       const totalTime = Date.now() - performanceStart;
-      console.log('✅ [COMPLETE] Background mode response ready');
-      console.log(`⏱️  [METRIC] Total Request Time: ${totalTime}ms`);
-      console.log('═══════════════════════════════════════════════════════\n');
       
       return NextResponse.json({
         comments: formattedComments,
@@ -890,10 +912,8 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    console.log('🔥 [MODE] Manual refresh mode - fetching fresh data');
     const manualFetchStart = Date.now();
     
-    console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Fetching comments for ${connectedPage.pageName || pageId}`);
     
     // Helper function to refresh page access token
     const refreshPageAccessToken = async (): Promise<string | null> => {
@@ -907,11 +927,9 @@ export async function GET(request: NextRequest) {
         });
         
         if (!account?.access_token) {
-          console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: No user access token found`);
           return null;
         }
         
-        console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Refreshing page token...`);
         
         let targetPageId = pageId;
         let facebookPageId: string | null = null;
@@ -987,10 +1005,8 @@ export async function GET(request: NextRequest) {
               data: { pageAccessToken: page.access_token },
             });
             
-            console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Token refreshed successfully`);
             return page.access_token;
           } else {
-            console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Page not found when refreshing token`);
           }
         } else {
           const errorText = await pagesResponse.text();
@@ -1001,17 +1017,13 @@ export async function GET(request: NextRequest) {
               const errorMessage = errorData.error.message || '';
               
               if (errorCode === 4) {
-                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Rate Limit: Cannot refresh token (code 4). Please wait and try again.`);
               } else {
-                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token refresh failed - ${errorMessage}`);
               }
             }
           } catch (parseError) {
-            console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Failed to refresh token`);
           }
         }
       } catch (error) {
-        console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception during token refresh`);
       }
       return null;
     };
@@ -1025,7 +1037,6 @@ export async function GET(request: NextRequest) {
       if (refreshedToken) {
         currentPageAccessToken = refreshedToken;
       } else {
-        console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Page token missing or expired`);
         return NextResponse.json({
           error: 'Page access token is missing or expired. Please reconnect your Facebook account to refresh the token.',
           suggestion: 'reconnect_account',
@@ -1109,7 +1120,6 @@ export async function GET(request: NextRequest) {
     let hasErrorCode10 = false; // Track if we encountered Facebook error code 10
     let tokenRefreshedOnce = false; // Track if we already refreshed token once (to avoid multiple refreshes)
     
-    console.log(`📡 [API] Fetching ${isInstagram ? 'media' : 'posts'} from Meta API...`);
     const postsFetchStart = Date.now();
     
     try {
@@ -1131,8 +1141,6 @@ export async function GET(request: NextRequest) {
         posts = postsData.data || [];
         postsFetchSuccess = true;
         const postsFetchTime = Date.now() - postsFetchStart;
-        console.log(`✅ [API] Found ${posts.length} ${isInstagram ? 'media' : 'posts'}`);
-        console.log(`⏱️  [METRIC] Posts fetch: ${postsFetchTime}ms`);
       } else {
         const errorText = await postsResponse.text();
         postsError = errorText;
@@ -1146,13 +1154,10 @@ export async function GET(request: NextRequest) {
             
             if (errorCode === 10 && !isInstagram) {
               hasErrorCode10 = true;
-              console.error(`Facebook Error: Permission blocked (code 10) - requires pages_read_engagement`);
             } else if (errorCode === 190 || errorCode === 200 || errorType === 'OAuthException') {
-              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token expired (code ${errorCode}) - ${errorMessage}`);
               
               // For Instagram, try to refresh token if it's a token error
               if (isInstagram) {
-                console.log(`Instagram: Attempting token refresh...`);
                 try {
                   const refreshedToken = await refreshPageAccessToken();
                   if (refreshedToken) {
@@ -1166,25 +1171,18 @@ export async function GET(request: NextRequest) {
                       const retryPostsData = await retryPostsResponse.json();
                       posts = retryPostsData.data || [];
                       postsFetchSuccess = true;
-                      console.log(`Instagram: Successfully fetched ${posts.length} media after token refresh`);
                     } else {
-                      console.error(`Instagram Error: Still failing after token refresh`);
                     }
                   } else {
-                    console.error(`Instagram Error: Token refresh failed`);
                   }
                 } catch (refreshError) {
-                  console.error(`Instagram Error: Exception during token refresh`);
                 }
               }
             } else if (errorCode === 4) {
-              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Rate Limit: ${errorMessage}`);
             } else {
-              console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: ${errorMessage}`);
             }
           }
         } catch (e) {
-          console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Failed to fetch ${isInstagram ? 'media' : 'posts'}`);
         }
         
         // For Facebook, try /feed endpoint as fallback
@@ -1219,12 +1217,10 @@ export async function GET(request: NextRequest) {
           // Use existing post IDs to fetch new comments
           posts = existingComments.map(c => ({ id: c.postId }));
           if (posts.length > 0) {
-            console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Using ${posts.length} existing post IDs`);
           }
         }
       }
     } catch (error) {
-      console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception fetching ${isInstagram ? 'media' : 'posts'}`);
       postsError = String(error);
       // Try to get post IDs from existing comments
       const existingComments = await prisma.comment.findMany({
@@ -1251,7 +1247,6 @@ export async function GET(request: NextRequest) {
     let sentimentAnalysisTime = 0;
     
     if (posts.length > 0) {
-      console.log(`📋 [DATA] Processing ${posts.length} ${isInstagram ? 'media' : 'posts'} for comments`);
     }
     
     const commentsFetchStart = Date.now();
@@ -1259,12 +1254,10 @@ export async function GET(request: NextRequest) {
     // Fetch comments for all posts in parallel for better performance
     // Process in batches to avoid overwhelming the API
     const batchSize = 10; // Increased from 5 to 10 for better performance
-    console.log(`⚙️  [CONFIG] Batch size: ${batchSize} posts per batch`);
     
     for (let i = 0; i < posts.length; i += batchSize) {
       const batchStart = Date.now();
       const batch = posts.slice(i, i + batchSize);
-      console.log(`📦 [BATCH ${Math.floor(i / batchSize) + 1}] Processing posts ${i + 1}-${Math.min(i + batchSize, posts.length)}`);
       
       const commentFetchPromises = batch.map(async (post) => {
         try {
@@ -1363,20 +1356,17 @@ export async function GET(request: NextRequest) {
               // Analyze sentiment if not already set
               if (!savedComment.sentiment) {
                 const sentimentStart = Date.now();
-                console.log(`🤖 [AI] Analyzing sentiment for comment ${savedComment.id}`);
                 const sentiment = await analyzeCommentSentiment(commentMessage);
                 const sentimentTime = Date.now() - sentimentStart;
                 sentimentAnalysisTime += sentimentTime;
                 sentimentAnalysisCount++;
                 
                 if (sentiment) {
-                  console.log(`✅ [AI] Sentiment: ${sentiment} (${sentimentTime}ms)`);
                   await prisma.comment.update({
                     where: { id: savedComment.id },
                     data: { sentiment },
                   });
                 } else {
-                  console.warn(`⚠️  [AI] Sentiment analysis returned null for comment ${savedComment.id}`);
                 }
               }
 
@@ -1423,14 +1413,12 @@ export async function GET(request: NextRequest) {
                 // Handle error code 10 specifically - do NOT retry
                 if (errorCode === 10 && !isInstagram) {
                   hasErrorCode10 = true;
-                  console.error(`Facebook Error: Permission blocked (code 10) for post ${post.id}`);
                   // Do not retry for code 10, just track it
                   continue; // Skip to next post
                 }
                 
                 // Check if this is a token expiration or permission error that we should retry
                 if (errorCode === 200 || errorType === 'OAuthException' || errorCode === 190) {
-                  console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token expired (code ${errorCode}) for post ${post.id}`);
                   
                   // Try to refresh the token - BUT ONLY ONCE for all posts
                   // For Facebook: only if user token has permission
@@ -1439,33 +1427,26 @@ export async function GET(request: NextRequest) {
                   
                   if (shouldTryRefresh) {
                     try {
-                      console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Refreshing token (one time for all posts)...`);
                       const refreshedToken = await refreshPageAccessToken();
                       if (refreshedToken) {
                         currentPageAccessToken = refreshedToken;
                         tokenRefreshedOnce = true; // Mark as refreshed so we don't do it again
                         shouldRetry = true;
-                        console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Token refreshed, retrying comment fetch...`);
                       } else {
-                        console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Token refresh failed`);
                         commentsErrors.push(errorMessage);
                       }
                     } catch (refreshError) {
-                      console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception during token refresh`);
                       commentsErrors.push(errorMessage);
                     }
                   } else if (tokenRefreshedOnce) {
                     // Token already refreshed once, just retry with the refreshed token
                     shouldRetry = true;
                   } else {
-                    console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Cannot refresh token - user needs to reconnect`);
                     commentsErrors.push(errorMessage);
                   }
                 } else if (errorCode === 4) {
-                  console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Rate Limit: ${errorMessageText}`);
                   commentsErrors.push(errorMessage);
                 } else {
-                  console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: ${errorMessageText}`);
                   commentsErrors.push(errorMessage);
                 }
               } else {
@@ -1492,7 +1473,6 @@ export async function GET(request: NextRequest) {
                   const retryCommentsData = await retryResponse.json();
                   const retryComments = retryCommentsData.data || [];
                   totalCommentsFetched += retryComments.length;
-                  console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: Successfully fetched ${retryComments.length} comments after token refresh`);
                   
                   // Process the retried comments
                   for (const comment of retryComments) {
@@ -1543,20 +1523,17 @@ export async function GET(request: NextRequest) {
                       // Analyze sentiment if not already set
                       if (!savedComment.sentiment) {
                         const sentimentStart = Date.now();
-                        console.log(`🤖 [AI] Analyzing sentiment for comment ${savedComment.id}`);
                         const sentiment = await analyzeCommentSentiment(commentMessage);
                         const sentimentTime = Date.now() - sentimentStart;
                         sentimentAnalysisTime += sentimentTime;
                         sentimentAnalysisCount++;
                         
                         if (sentiment) {
-                          console.log(`✅ [AI] Sentiment: ${sentiment} (${sentimentTime}ms)`);
                           await prisma.comment.update({
                             where: { id: savedComment.id },
                             data: { sentiment },
                           });
                         } else {
-                          console.warn(`⚠️  [AI] Sentiment analysis returned null for comment ${savedComment.id}`);
                         }
                       }
 
@@ -1593,18 +1570,14 @@ export async function GET(request: NextRequest) {
                       const retryErrorMessage = retryErrorData.error.message || '';
                       if (retryErrorCode === 10 && !isInstagram) {
                         hasErrorCode10 = true;
-                        console.error(`Facebook Error: Permission blocked (code 10) on retry`);
                       } else {
-                        console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Retry failed - ${retryErrorMessage}`);
                       }
                     }
                   } catch (e) {
-                    console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Retry failed`);
                   }
                   commentsErrors.push(`Post ${post.id} (retry): ${retryErrorText.substring(0, 200)}`);
                 }
               } catch (retryError) {
-                console.error(`${isInstagram ? 'Instagram' : 'Facebook'} Error: Exception during retry`);
                 commentsErrors.push(`Post ${post.id} (retry error): ${String(retryError).substring(0, 200)}`);
               }
             }
@@ -1615,21 +1588,14 @@ export async function GET(request: NextRequest) {
       }
       
       const batchTime = Date.now() - batchStart;
-      console.log(`⏱️  [METRIC] Batch ${Math.floor(i / batchSize) + 1} completed in ${batchTime}ms`);
     }
 
     const totalCommentsFetchTime = Date.now() - commentsFetchStart;
-    console.log(`✅ [COMPLETE] Comments processing finished`);
-    console.log(`⏱️  [METRIC] Total comments fetch: ${totalCommentsFetchTime}ms`);
-    console.log(`📊 [STATS] ${totalCommentsFetched} total, ${newCommentsCount} new, ${skippedCommentsCount} skipped`);
     
     if (sentimentAnalysisCount > 0) {
       const avgSentimentTime = Math.round(sentimentAnalysisTime / sentimentAnalysisCount);
-      console.log(`🤖 [AI STATS] ${sentimentAnalysisCount} sentiment analyses, avg ${avgSentimentTime}ms per comment`);
-      console.log(`⏱️  [METRIC] Total AI time: ${sentimentAnalysisTime}ms`);
     }
     
-    console.log(`${isInstagram ? 'Instagram' : 'Facebook'}: ${totalCommentsFetched} total comments, ${newCommentsCount} new, ${skippedCommentsCount} skipped`);
 
     // Fetch comments from ads (Facebook + Instagram)
     // Ads comments are comments on the post/media behind the ad.
@@ -1652,7 +1618,6 @@ export async function GET(request: NextRequest) {
       totalCommentsFetched += adsResult.totalCommentsFetched;
     } else {
       const platform = isInstagram ? 'Instagram' : 'Facebook';
-      console.log(`ℹ️  [${platform}] No ad account ID configured - skipping ad comments`);
     }
 
     // Update lastCommentsFetchedAt after successful comment fetch
@@ -1675,7 +1640,6 @@ export async function GET(request: NextRequest) {
           });
         }
       } catch (cleanupError) {
-        console.error('Failed to cleanup deleted comments from database:', cleanupError);
       }
 
       await prisma.connectedPage.update({
@@ -1707,8 +1671,6 @@ export async function GET(request: NextRequest) {
       },
       take: 100,
     });
-    console.log(`⏱️  [METRIC] Final DB query: ${Date.now() - dbFinalQueryStart}ms`);
-    console.log(`📦 [DATA] Retrieved ${storedComments.length} comments from database`);
 
     // Fetch post messages, images, and dates for all unique post IDs
     const postIds = [...new Set(storedComments.map(c => c.postId))];
@@ -1716,7 +1678,6 @@ export async function GET(request: NextRequest) {
     const postImages: Record<string, string> = {};
     const postCreatedAts: Record<string, string> = {};
     
-    console.log(`📋 [DATA] Fetching metadata for ${postIds.length} unique posts (limit 20)`);
     const postMetaFetchStart = Date.now();
     // Try to fetch post data (optional - don't fail if this doesn't work)
     for (const postId of postIds.slice(0, 20)) { // Limit to 20 to avoid too many API calls
@@ -1744,7 +1705,6 @@ export async function GET(request: NextRequest) {
         // Silently fail - post data is optional
       }
     }
-    console.log(`⏱️  [METRIC] Post metadata fetch: ${Date.now() - postMetaFetchStart}ms`);
 
     // Format comments with page and post information
     const formattedComments = storedComments.map(comment => ({
@@ -1834,39 +1794,16 @@ export async function GET(request: NextRequest) {
     const totalRequestTime = Date.now() - performanceStart;
     const manualFetchTime = Date.now() - manualFetchStart;
     
-    console.log('\n📊 ═══════════════════════════════════════════════════════');
-    console.log('📈 [PERFORMANCE SUMMARY]');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log(`⏱️  Total Request Time: ${totalRequestTime}ms`);
-    console.log(`⏱️  Manual Fetch Time: ${manualFetchTime}ms`);
-    console.log(`📡 API Calls: Posts + Comments + ${postIds.slice(0, 20).length} Post Metadata`);
-    console.log(`💾 Database Operations: ${storedComments.length} comments retrieved`);
     if (sentimentAnalysisCount > 0) {
-      console.log(`🤖 AI Analysis: ${sentimentAnalysisCount} comments (${sentimentAnalysisTime}ms total)`);
     }
-    console.log(`📦 Result: ${formattedComments.length} comments, ${newCommentsCount} new`);
-    console.log('═══════════════════════════════════════════════════════\n');
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('❌ [Facebook API] CRITICAL ERROR in comments route');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     if (error instanceof Error) {
-      console.error('   Error Type:', error.name);
-      console.error('   Error Message:', error.message);
-      console.error('   Stack Trace:', error.stack?.split('\n').slice(0, 3).join('\n'));
     } else {
-      console.error('   Unknown Error:', error);
     }
     
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('🔍 Troubleshooting:');
-    console.error('   1. Check if Facebook/Instagram page is still connected');
-    console.error('   2. Verify FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET in .env');
-    console.error('   3. Check if page access tokens are still valid');
-    console.error('   4. Review Facebook API status: https://developers.facebook.com/status');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     return NextResponse.json(
       { 

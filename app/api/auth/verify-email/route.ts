@@ -58,9 +58,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
       },
     });
-  } catch (error) {
-    console.error('Email verification error:', error);
-    return NextResponse.json(
+  } catch (error) {    return NextResponse.json(
       { success: false, message: 'Failed to verify email. Please try again.' },
       { status: 500 }
     );

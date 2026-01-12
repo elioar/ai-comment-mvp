@@ -83,9 +83,7 @@ export async function POST(request: NextRequest) {
     // Send verification email
     try {
       await sendVerificationEmail(email, token, name);
-    } catch (emailError) {
-      console.error('Failed to send verification email:', emailError);
-      // Don't fail registration if email fails, but log it
+    } catch (emailError) {      // Don't fail registration if email fails, but log it
       // In development, the email will be logged to console
     }
 
@@ -98,10 +96,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
       },
     });
-  } catch (error) {
-    console.error('Registration error:', error);
-    
-    // Ensure we always return JSON, even on error
+  } catch (error) {    // Ensure we always return JSON, even on error
     if (error instanceof Error) {
       return NextResponse.json(
         { success: false, message: error.message || 'Registration failed. Please try again.' },

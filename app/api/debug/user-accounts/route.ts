@@ -116,9 +116,7 @@ export async function GET(request: NextRequest) {
         hasAccessToken: !!acc.access_token,
       })),
     });
-  } catch (error: any) {
-    console.error('Error in debug endpoint:', error);
-    return NextResponse.json(
+  } catch (error: any) {    return NextResponse.json(
       { error: 'Internal server error', details: error.message },
       { status: 500 }
     );

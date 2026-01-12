@@ -65,6 +65,8 @@ export default function PagesPage() {
   const [loadingAdAccounts, setLoadingAdAccounts] = useState(false);
   const [updatingAdAccount, setUpdatingAdAccount] = useState<string | null>(null);
   const [expandedAdAccountPage, setExpandedAdAccountPage] = useState<string | null>(null);
+  const [editingAdAccountValue, setEditingAdAccountValue] = useState<string>('');
+  const [useManualAdAccount, setUseManualAdAccount] = useState<boolean>(false);
   const [showAddPageDropdown, setShowAddPageDropdown] = useState<'facebook' | 'instagram' | null>(null);
   const [pageToDisconnect, setPageToDisconnect] = useState<{ pageId: string; provider: string; pageName: string } | null>(null);
   const hasHandledOAuth = useRef(false);
@@ -93,10 +95,10 @@ export default function PagesPage() {
     }
   }, [status, router]);
 
-  // Fetch ad accounts when connected pages with ad accounts are loaded
+  // Fetch ad accounts when connected pages are loaded (Facebook or Instagram)
   useEffect(() => {
-    const hasPagesWithAdAccounts = connectedPages.some(cp => cp.provider === 'facebook' && cp.adAccountId);
-    if (hasPagesWithAdAccounts && adAccounts.length === 0 && !loadingAdAccounts) {
+    const hasConnectedPages = connectedPages.length > 0;
+    if (hasConnectedPages && adAccounts.length === 0 && !loadingAdAccounts) {
       fetchAdAccounts();
     }
   }, [connectedPages]);
@@ -112,9 +114,6 @@ export default function PagesPage() {
           
           // Clean up Facebook redirect hash
           window.history.replaceState(null, '', window.location.pathname + window.location.search);
-          
-          console.log('Detected Facebook OAuth callback, refreshing session...');
-          
           // Refresh the router to trigger session refresh (non-blocking)
           router.refresh();
           
@@ -149,7 +148,6 @@ export default function PagesPage() {
       try {
         data = await response.json();
       } catch (parseError) {
-        console.error('Error parsing response:', parseError);
         setError('Failed to fetch pages');
         return;
       }
@@ -207,7 +205,6 @@ export default function PagesPage() {
                                data.error?.includes('token is invalid'));
       setHasNoActiveAccount(noActiveAccount);
     } catch (error) {
-      console.error('Error fetching pages:', error);
       // Don't set error if we have connected pages - they might still work
       setError('Error loading pages');
       if (showLoading) {
@@ -253,10 +250,8 @@ export default function PagesPage() {
       if (response.ok && data.adAccounts) {
         setAdAccounts(data.adAccounts);
       } else {
-        console.error('Failed to fetch ad accounts:', data.error);
       }
     } catch (error) {
-      console.error('Error fetching ad accounts:', error);
     } finally {
       setLoadingAdAccounts(false);
     }
@@ -273,6 +268,19 @@ export default function PagesPage() {
     });
     
     return matchingAccount ? matchingAccount.name : adAccountId;
+  };
+
+  // Helper function to get ad account ID value for dropdown
+  const getAdAccountIdForDropdown = (adAccountId: string | null | undefined): string => {
+    if (!adAccountId) return '';
+    
+    const normalizedStored = adAccountId.replace(/^act_/i, '').trim();
+    const matchingAccount = adAccounts.find(acc => {
+      const normalizedAccId = acc.accountId.replace(/^act_/i, '').trim();
+      return normalizedAccId === normalizedStored;
+    });
+    
+    return matchingAccount ? matchingAccount.accountId : `act_${adAccountId}`;
   };
 
   const updateAdAccount = async (pageId: string, adAccountIdOrFullId: string | null, provider: string) => {
@@ -314,7 +322,6 @@ export default function PagesPage() {
         setError(responseData.error || 'Failed to update ad account');
       }
     } catch (error) {
-      console.error('Error updating ad account:', error);
       setError('Error updating ad account');
     } finally {
       setUpdatingAdAccount(null);
@@ -324,6 +331,13 @@ export default function PagesPage() {
   const connectPage = async (page: FacebookPage | InstagramPage, provider: 'facebook' | 'instagram' = 'facebook') => {
     setConnecting(page.id);
     setError(null);
+    
+    console.log(`🔗 [Connect Page] Starting connection for ${provider} page:`, {
+      pageId: page.id,
+      pageName: provider === 'instagram' ? (page as InstagramPage).username || (page as InstagramPage).name : (page as FacebookPage).name,
+      provider
+    });
+    
     try {
       // Determine page name based on provider type
       let pageName: string;
@@ -334,15 +348,21 @@ export default function PagesPage() {
         const facebookPage = page as FacebookPage;
         pageName = facebookPage.name;
       }
-      const requestBody = {
+      
+      const requestBody: any = {
         pageId: page.id,
         pageName: pageName,
         pageAccessToken: page.access_token,
         provider: provider,
       };
-
-      console.log('Connecting page:', { pageId: page.id, pageName, provider });
-
+      
+      // For Instagram pages, include the Facebook Page ID if available
+      if (provider === 'instagram' && 'facebook_page_id' in page) {
+        requestBody.facebookPageId = (page as InstagramPage).facebook_page_id;
+      }
+      
+      console.log(`🔗 [Connect Page] Sending POST request to /api/facebook/pages`);
+      
       const response = await fetch('/api/facebook/pages', {
         method: 'POST',
         headers: {
@@ -352,9 +372,21 @@ export default function PagesPage() {
       });
 
       const responseData = await response.json();
+      
+      console.log(`🔗 [Connect Page] Response received:`, {
+        ok: response.ok,
+        status: response.status,
+        hasPage: !!responseData.page,
+        adAccountId: responseData.page?.adAccountId || null,
+        error: responseData.error || null
+      });
 
       if (response.ok) {
-        console.log('Page connected successfully:', responseData);
+        // Fetch ad accounts when a new page is connected (so they're available for editing)
+        if (adAccounts.length === 0 && !loadingAdAccounts) {
+          console.log(`🔗 [Connect Page] Fetching ad accounts (none loaded yet)`);
+          fetchAdAccounts();
+        }
         
         // Optimistically update the state immediately with the newly connected page
         if (responseData.page) {
@@ -366,6 +398,13 @@ export default function PagesPage() {
             createdAt: responseData.page.createdAt,
             adAccountId: responseData.page.adAccountId || null,
           };
+          
+          console.log(`✅ [Connect Page] Page connected successfully:`, {
+            pageId: newConnectedPage.pageId,
+            pageName: newConnectedPage.pageName,
+            provider: newConnectedPage.provider,
+            adAccountId: newConnectedPage.adAccountId || 'No Ad Account'
+          });
           
           // Add to connected pages list if not already there
           setConnectedPages(prev => {
@@ -385,13 +424,15 @@ export default function PagesPage() {
         }
         
         // Force fetch after connection to get fresh data (cache is cleared server-side)
+        console.log(`🔗 [Connect Page] Refreshing page data...`);
         await fetchData(true, false); // Force fetch after connection, no loading spinner
+        console.log(`✅ [Connect Page] Connection complete!`);
       } else {
-        console.error('Failed to connect page:', responseData);
+        console.error(`❌ [Connect Page] Connection failed:`, responseData.error || responseData.details || 'Unknown error');
         setError(responseData.error || responseData.details || 'Failed to connect page');
       }
     } catch (error) {
-      console.error('Error connecting page:', error);
+      console.error(`❌ [Connect Page] Error connecting page:`, error);
       setError('Error connecting page');
     } finally {
       setConnecting(null);
@@ -417,7 +458,6 @@ export default function PagesPage() {
         setError(errorData.error || 'Failed to disconnect page');
       }
     } catch (error) {
-      console.error('Error disconnecting page:', error);
       setError('Error disconnecting page');
     } finally {
       setDisconnecting(null);
@@ -769,7 +809,6 @@ export default function PagesPage() {
                             body: JSON.stringify({ userId: session.user.id }),
                           });
                         } catch (error) {
-                          console.error('Error storing linking user:', error);
                           // Still continue with OAuth even if storing fails
                         }
                       }
@@ -812,7 +851,6 @@ export default function PagesPage() {
                               body: JSON.stringify({ userId: session.user.id }),
                             });
                           } catch (error) {
-                            console.error('Error storing linking user:', error);
                             // Still continue with OAuth even if storing fails
                           }
                         }
@@ -854,7 +892,6 @@ export default function PagesPage() {
                             const configCheck = await fetch('/api/auth/check-facebook-config');
                             
                             if (!configCheck.ok) {
-                              console.error('Config check failed with status:', configCheck.status);
                               // Continue anyway - let NextAuth handle the error
                             } else {
                               const config = await configCheck.json();
@@ -871,7 +908,6 @@ export default function PagesPage() {
                               }
                             }
                           } catch (error) {
-                            console.error('Error checking Facebook config:', error);
                             // Continue anyway - let NextAuth handle the error
                             // The server-side check will catch any real configuration issues
                           }
@@ -885,7 +921,6 @@ export default function PagesPage() {
                                 body: JSON.stringify({ userId: session.user.id }),
                               });
                             } catch (error) {
-                              console.error('Error storing linking user:', error);
                               // Still continue with OAuth even if storing fails
                             }
                           }
@@ -893,7 +928,6 @@ export default function PagesPage() {
                           try {
                             await signIn('facebook', { callbackUrl: '/dashboard/pages' });
                           } catch (error: any) {
-                            console.error('Facebook sign in error:', error);
                             alert(`Failed to connect Facebook: ${error?.message || 'Unknown error'}. Please check your Facebook App configuration.`);
                           }
                         }}
@@ -978,19 +1012,80 @@ export default function PagesPage() {
                                     </Link>
                                   </div>
                                   
-                                  {/* Ad Account Display for Facebook pages */}
-                                  {connectedPage.provider === 'facebook' && connectedPage.adAccountId && (
+                                  {/* Ad Account Display for Facebook and Instagram pages */}
+                                  {(connectedPage.adAccountId || expandedAdAccountPage === connectedPage.pageId) && (
                                     <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
-                                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                                        </svg>
-                                        <span>
-                                          {t('dashboard.pages.adAccount', 'Ad Account:')} <span className="font-medium text-gray-900 dark:text-gray-100">
-                                            {loadingAdAccounts ? connectedPage.adAccountId : getAdAccountName(connectedPage.adAccountId)}
-                                          </span>
-                                        </span>
-                                      </div>
+                                      {expandedAdAccountPage === connectedPage.pageId ? (
+                                        <div className="space-y-2">
+                                          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                            </svg>
+                                            <span className="font-medium">{t('dashboard.pages.adAccount', 'Ad Account:')}</span>
+                                          </div>
+                                          <select
+                                            value={editingAdAccountValue}
+                                            onChange={(e) => setEditingAdAccountValue(e.target.value)}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            disabled={updatingAdAccount === connectedPage.pageId}
+                                          >
+                                            <option value="">{t('dashboard.pages.noAdAccount', 'No Ad Account')}</option>
+                                            {adAccounts.map((account) => (
+                                              <option key={account.id} value={account.accountId}>
+                                                {account.name} ({account.accountId})
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <div className="flex gap-2">
+                                            <button
+                                              onClick={() => {
+                                                updateAdAccount(connectedPage.pageId, editingAdAccountValue, connectedPage.provider);
+                                              }}
+                                              disabled={updatingAdAccount === connectedPage.pageId}
+                                              className="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                              {updatingAdAccount === connectedPage.pageId ? t('dashboard.pages.saving', 'Saving...') : t('dashboard.pages.save', 'Save')}
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setExpandedAdAccountPage(null);
+                                                setEditingAdAccountValue('');
+                                                setUseManualAdAccount(false);
+                                              }}
+                                              disabled={updatingAdAccount === connectedPage.pageId}
+                                              className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                              {t('dashboard.pages.cancel', 'Cancel')}
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                            </svg>
+                                            <span>
+                                              {t('dashboard.pages.adAccount', 'Ad Account:')} <span className="font-medium text-gray-900 dark:text-gray-100">
+                                                {loadingAdAccounts ? connectedPage.adAccountId : getAdAccountName(connectedPage.adAccountId)}
+                                              </span>
+                                            </span>
+                                          </div>
+                                          <button
+                                            onClick={() => {
+                                              setExpandedAdAccountPage(connectedPage.pageId);
+                                              setEditingAdAccountValue(getAdAccountIdForDropdown(connectedPage.adAccountId));
+                                              setUseManualAdAccount(false);
+                                            }}
+                                            className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                            title={t('dashboard.pages.editAdAccount', 'Edit Ad Account')}
+                                          >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -1266,18 +1361,97 @@ export default function PagesPage() {
                                         </div>
                                         
                                         {/* Ad Account Display for connected Facebook pages */}
-                                        {isConnected && connectedPage && connectedPage.adAccountId && (
+                                        {isConnected && connectedPage && (connectedPage.adAccountId || expandedAdAccountPage === connectedPage.pageId) && (
                                           <div className="mt-4 pt-4 border-t border-blue-100 dark:border-blue-800/50">
-                                            <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                                              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                                              </svg>
-                                              <span className="font-medium">
-                                                {t('dashboard.pages.adAccount', 'Ad Account:')} <span className="font-semibold text-gray-900 dark:text-gray-100">
-                                                  {loadingAdAccounts ? connectedPage.adAccountId : getAdAccountName(connectedPage.adAccountId)}
-                                                </span>
-                                              </span>
-                                            </div>
+                                            {expandedAdAccountPage === connectedPage.pageId ? (
+                                              <div className="space-y-2">
+                                                <div className="flex items-center justify-between mb-2">
+                                                  <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                                    </svg>
+                                                    <span className="font-medium">{t('dashboard.pages.adAccount', 'Ad Account:')}</span>
+                                                  </div>
+                                                  <button
+                                                    onClick={() => setUseManualAdAccount(!useManualAdAccount)}
+                                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                                                  >
+                                                    {useManualAdAccount ? t('dashboard.pages.useDropdown', 'Use Dropdown') : t('dashboard.pages.enterManually', 'Enter Manually')}
+                                                  </button>
+                                                </div>
+                                                {useManualAdAccount ? (
+                                                  <input
+                                                    type="text"
+                                                    value={editingAdAccountValue}
+                                                    onChange={(e) => setEditingAdAccountValue(e.target.value)}
+                                                    placeholder="act_123456789"
+                                                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                    disabled={updatingAdAccount === connectedPage.pageId}
+                                                  />
+                                                ) : (
+                                                  <select
+                                                    value={editingAdAccountValue}
+                                                    onChange={(e) => setEditingAdAccountValue(e.target.value)}
+                                                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                    disabled={updatingAdAccount === connectedPage.pageId}
+                                                  >
+                                                    <option value="">{t('dashboard.pages.noAdAccount', 'No Ad Account')}</option>
+                                                    {adAccounts.map((account) => (
+                                                      <option key={account.id} value={account.accountId}>
+                                                        {account.name} ({account.accountId})
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                )}
+                                                <div className="flex gap-2">
+                                                  <button
+                                                    onClick={() => {
+                                                      updateAdAccount(connectedPage.pageId, editingAdAccountValue, connectedPage.provider);
+                                                    }}
+                                                    disabled={updatingAdAccount === connectedPage.pageId}
+                                                    className="flex-1 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  >
+                                                    {updatingAdAccount === connectedPage.pageId ? t('dashboard.pages.saving', 'Saving...') : t('dashboard.pages.save', 'Save')}
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      setExpandedAdAccountPage(null);
+                                                      setEditingAdAccountValue('');
+                                                    }}
+                                                    disabled={updatingAdAccount === connectedPage.pageId}
+                                                    className="px-3 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  >
+                                                    {t('dashboard.pages.cancel', 'Cancel')}
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                  <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                                  </svg>
+                                                  <span className="font-medium">
+                                                    {t('dashboard.pages.adAccount', 'Ad Account:')} <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                                      {loadingAdAccounts ? connectedPage.adAccountId : getAdAccountName(connectedPage.adAccountId)}
+                                                    </span>
+                                                  </span>
+                                                </div>
+                                                <button
+                                                  onClick={() => {
+                                                    setExpandedAdAccountPage(connectedPage.pageId);
+                                                    setEditingAdAccountValue(getAdAccountIdForDropdown(connectedPage.adAccountId));
+                                                    setUseManualAdAccount(false);
+                                                  }}
+                                                  className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                                  title={t('dashboard.pages.editAdAccount', 'Edit Ad Account')}
+                                                >
+                                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                  </svg>
+                                                </button>
+                                              </div>
+                                            )}
                                           </div>
                                         )}
                                       </div>
@@ -1502,6 +1676,7 @@ export default function PagesPage() {
                                 .map((page) => {
                                   const isConnected = true;
                                   const isProcessing = connecting === page.id || disconnecting === page.id;
+                                  const connectedPage = connectedPages.find(cp => cp.pageId === page.id && cp.provider === 'instagram');
                                   
                                   return (
                                     <div
@@ -1573,6 +1748,101 @@ export default function PagesPage() {
                                             </Link>
                                           )}
                                         </div>
+                                        
+                                        {/* Ad Account Display for connected Instagram pages */}
+                                        {isConnected && connectedPage && (connectedPage.adAccountId || expandedAdAccountPage === connectedPage.pageId) && (
+                                          <div className="mt-4 pt-4 border-t border-pink-100 dark:border-pink-800/50">
+                                            {expandedAdAccountPage === connectedPage.pageId ? (
+                                              <div className="space-y-2">
+                                                <div className="flex items-center justify-between mb-2">
+                                                  <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                    <svg className="w-4 h-4 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                                    </svg>
+                                                    <span className="font-medium">{t('dashboard.pages.adAccount', 'Ad Account:')}</span>
+                                                  </div>
+                                                  <button
+                                                    onClick={() => setUseManualAdAccount(!useManualAdAccount)}
+                                                    className="text-xs text-pink-600 dark:text-pink-400 hover:underline"
+                                                  >
+                                                    {useManualAdAccount ? t('dashboard.pages.useDropdown', 'Use Dropdown') : t('dashboard.pages.enterManually', 'Enter Manually')}
+                                                  </button>
+                                                </div>
+                                                {useManualAdAccount ? (
+                                                  <input
+                                                    type="text"
+                                                    value={editingAdAccountValue}
+                                                    onChange={(e) => setEditingAdAccountValue(e.target.value)}
+                                                    placeholder="act_123456789"
+                                                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                                                    disabled={updatingAdAccount === connectedPage.pageId}
+                                                  />
+                                                ) : (
+                                                  <select
+                                                    value={editingAdAccountValue}
+                                                    onChange={(e) => setEditingAdAccountValue(e.target.value)}
+                                                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                                                    disabled={updatingAdAccount === connectedPage.pageId}
+                                                  >
+                                                    <option value="">{t('dashboard.pages.noAdAccount', 'No Ad Account')}</option>
+                                                    {adAccounts.map((account) => (
+                                                      <option key={account.id} value={account.accountId}>
+                                                        {account.name} ({account.accountId})
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                )}
+                                                <div className="flex gap-2">
+                                                  <button
+                                                    onClick={() => {
+                                                      updateAdAccount(connectedPage.pageId, editingAdAccountValue, connectedPage.provider);
+                                                    }}
+                                                    disabled={updatingAdAccount === connectedPage.pageId}
+                                                    className="flex-1 px-3 py-1.5 text-xs bg-pink-600 hover:bg-pink-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  >
+                                                    {updatingAdAccount === connectedPage.pageId ? t('dashboard.pages.saving', 'Saving...') : t('dashboard.pages.save', 'Save')}
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      setExpandedAdAccountPage(null);
+                                                      setEditingAdAccountValue('');
+                                                    }}
+                                                    disabled={updatingAdAccount === connectedPage.pageId}
+                                                    className="px-3 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  >
+                                                    {t('dashboard.pages.cancel', 'Cancel')}
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                  <svg className="w-4 h-4 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                                  </svg>
+                                                  <span className="font-medium">
+                                                    {t('dashboard.pages.adAccount', 'Ad Account:')} <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                                      {loadingAdAccounts ? connectedPage.adAccountId : getAdAccountName(connectedPage.adAccountId)}
+                                                    </span>
+                                                  </span>
+                                                </div>
+                                                <button
+                                                  onClick={() => {
+                                                    setExpandedAdAccountPage(connectedPage.pageId);
+                                                    setEditingAdAccountValue(getAdAccountIdForDropdown(connectedPage.adAccountId));
+                                                    setUseManualAdAccount(false);
+                                                  }}
+                                                  className="p-1.5 text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 rounded-lg transition-colors"
+                                                  title={t('dashboard.pages.editAdAccount', 'Edit Ad Account')}
+                                                >
+                                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                  </svg>
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   );

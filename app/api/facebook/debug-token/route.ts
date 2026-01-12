@@ -92,9 +92,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(debugInfo);
-  } catch (error) {
-    console.error('Error in debug endpoint:', error);
-    return NextResponse.json(
+  } catch (error) {    return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
       { status: 500 }
     );

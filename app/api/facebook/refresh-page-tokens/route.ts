@@ -97,19 +97,13 @@ export async function POST(request: NextRequest) {
           refreshedCount++;
           
           if (scopes.includes('pages_read_engagement')) {
-            verifiedCount++;
-            console.log(`[Refresh Tokens] ✅ ${connectedPage.pageName} has pages_read_engagement`);
-          } else {
-            console.warn(`[Refresh Tokens] ⚠️ ${connectedPage.pageName} still missing pages_read_engagement`);
-            errors.push(`${connectedPage.pageName}: Token refreshed but missing pages_read_engagement permission`);
+            verifiedCount++;          } else {            errors.push(`${connectedPage.pageName}: Token refreshed but missing pages_read_engagement permission`);
           }
         } else {
           const errorText = await debugResponse.text();
           errors.push(`${connectedPage.pageName}: Failed to verify token - ${errorText.substring(0, 100)}`);
         }
-      } catch (error) {
-        console.error(`[Refresh Tokens] Error refreshing ${connectedPage.pageName}:`, error);
-        errors.push(`${connectedPage.pageName}: ${String(error)}`);
+      } catch (error) {        errors.push(`${connectedPage.pageName}: ${String(error)}`);
       }
     }
 
@@ -120,9 +114,7 @@ export async function POST(request: NextRequest) {
       verified: verifiedCount,
       errors: errors.length > 0 ? errors : undefined,
     });
-  } catch (error) {
-    console.error('Error refreshing page tokens:', error);
-    return NextResponse.json(
+  } catch (error) {    return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
       { status: 500 }
     );

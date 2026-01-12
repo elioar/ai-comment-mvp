@@ -76,9 +76,7 @@ export default function SettingsPage() {
       } else {
         setMetaAccount(null);
       }
-    } catch (error) {
-      console.error('Error fetching Meta account:', error);
-      setError('Failed to load account information');
+    } catch (error) {      setError('Failed to load account information');
     } finally {
       setLoading(false);
     }
@@ -110,9 +108,7 @@ export default function SettingsPage() {
       } else {
         setError(data.error || 'Failed to disconnect account');
       }
-    } catch (error) {
-      console.error('Error disconnecting account:', error);
-      setError('Error disconnecting account');
+    } catch (error) {      setError('Error disconnecting account');
     } finally {
       setDisconnecting(false);
     }
@@ -455,9 +451,7 @@ export default function SettingsPage() {
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ userId: session.user.id }),
                                 });
-                              } catch (error) {
-                                console.error('Error storing linking user:', error);
-                                // Still continue with OAuth even if storing fails
+                              } catch (error) {                                // Still continue with OAuth even if storing fails
                               }
                             }
                             await signIn('facebook', { callbackUrl: '/dashboard/settings' });
@@ -482,9 +476,7 @@ export default function SettingsPage() {
                       try {
                         const configCheck = await fetch('/api/auth/check-facebook-config');
                         
-                        if (!configCheck.ok) {
-                          console.error('Config check failed with status:', configCheck.status);
-                          // Continue anyway - let NextAuth handle the error
+                        if (!configCheck.ok) {                          // Continue anyway - let NextAuth handle the error
                         } else {
                           const config = await configCheck.json();
                           
@@ -499,9 +491,7 @@ export default function SettingsPage() {
                             return;
                           }
                         }
-                      } catch (error) {
-                        console.error('Error checking Facebook config:', error);
-                        // Continue anyway - let NextAuth handle the error
+                      } catch (error) {                        // Continue anyway - let NextAuth handle the error
                         // The server-side check will catch any real configuration issues
                       }
 
@@ -513,17 +503,13 @@ export default function SettingsPage() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ userId: session.user.id }),
                           });
-                        } catch (error) {
-                          console.error('Error storing linking user:', error);
-                          // Still continue with OAuth even if storing fails
+                        } catch (error) {                          // Still continue with OAuth even if storing fails
                         }
                       }
                       
                       try {
                         await signIn('facebook', { callbackUrl: '/dashboard/settings' });
-                      } catch (error: any) {
-                        console.error('Facebook sign in error:', error);
-                        alert(`Failed to connect Facebook: ${error?.message || 'Unknown error'}. Please check your Facebook App configuration.`);
+                      } catch (error: any) {                        alert(`Failed to connect Facebook: ${error?.message || 'Unknown error'}. Please check your Facebook App configuration.`);
                       }
                     }}
                     className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all"

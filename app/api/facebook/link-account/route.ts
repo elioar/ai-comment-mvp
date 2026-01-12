@@ -106,10 +106,7 @@ export async function POST(request: NextRequest) {
         // The account will be deleted automatically due to cascade, so we can delete the user
         await prisma.user.delete({
           where: { id: oldUserId },
-        });
-        console.log('Deleted orphaned user created by OAuth:', oldUserId);
-      } catch (error) {
-        console.log('Could not delete old user (may have dependencies):', error);
+        });      } catch (error) {
       }
     }
 
@@ -117,9 +114,7 @@ export async function POST(request: NextRequest) {
       success: true, 
       message: 'Facebook account linked successfully' 
     });
-  } catch (error) {
-    console.error('Error linking Facebook account:', error);
-    return NextResponse.json(
+  } catch (error) {    return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );

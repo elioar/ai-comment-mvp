@@ -25,9 +25,7 @@ export const authFunctions = {
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text);
-        throw new Error('Server returned an invalid response. Please try again.');
+        const text = await response.text();        throw new Error('Server returned an invalid response. Please try again.');
       }
 
       const data = await response.json();
@@ -57,9 +55,7 @@ export const authFunctions = {
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text);
-        throw new Error('Server returned an invalid response. Please try again.');
+        const text = await response.text();        throw new Error('Server returned an invalid response. Please try again.');
       }
 
       const data = await response.json();
@@ -89,9 +85,7 @@ export const authFunctions = {
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text);
-        throw new Error('Server returned an invalid response. Please try again.');
+        const text = await response.text();        throw new Error('Server returned an invalid response. Please try again.');
       }
 
       const data = await response.json();
@@ -121,9 +115,7 @@ export const authFunctions = {
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text);
-        throw new Error('Server returned an invalid response. Please try again.');
+        const text = await response.text();        throw new Error('Server returned an invalid response. Please try again.');
       }
 
       const data = await response.json();

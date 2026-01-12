@@ -101,7 +101,6 @@ export async function GET(request: NextRequest) {
     let accessToken = account.access_token;
 
     // ALWAYS try to exchange token first to ensure we have a long-lived token
-    console.log('Facebook Pages: Fetching pages...');
     
     // Verify user token has required permissions
     try {
@@ -138,10 +137,8 @@ export async function GET(request: NextRequest) {
       
       // Check if it's a rate limit error (code 4, is_transient: true)
       if (meErrorData.error?.code === 4 && meErrorData.error?.is_transient === true) {
-        console.error('Facebook Rate Limit: Skipping token verification');
         // Continue without verification - rate limit is temporary
       } else {
-        console.error('Facebook Error: Token validation failed');
         return NextResponse.json({
           connectedPages,
           pages: [],
@@ -167,19 +164,16 @@ export async function GET(request: NextRequest) {
         const errorData = JSON.parse(errorText);
         if (errorData.error?.code === 190 || errorData.error?.type === 'OAuthException') {
           // Access token expired or invalid - try to exchange for long-lived token
-          console.log('Facebook: Token expired, attempting refresh...');
           const refreshedToken = await exchangeToken(accessToken);
           
           if (refreshedToken) {
             // Retry with refreshed token
             accessToken = refreshedToken;
-            console.log('Facebook: Token refreshed successfully');
             pagesResponse = await fetch(
               `https://graph.facebook.com/v24.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,picture.type(large)`
             );
           } else {
             // Could not refresh, return error
-            console.error('Facebook Error: Failed to refresh token');
             return NextResponse.json({
               connectedPages,
               pages: [],
@@ -222,7 +216,6 @@ export async function GET(request: NextRequest) {
     if (pagesData.error) {
       // Check if it's a rate limit error (code 4, is_transient: true)
       if (pagesData.error.code === 4 && pagesData.error.is_transient === true) {
-        console.error('Facebook Rate Limit: Cannot fetch pages (code 4). Returning cached pages.');
         // Return connected pages from database even if we can't fetch new ones
         // This allows the app to continue working
         return NextResponse.json({
@@ -243,7 +236,6 @@ export async function GET(request: NextRequest) {
     }
     
     const facebookPages = pagesData.data || [];
-    console.log(`Facebook Pages: Found ${facebookPages.length} pages`);
     
     if (facebookPages.length > 0) {
       // Refresh stored page tokens for existing connected pages
@@ -367,7 +359,6 @@ export async function GET(request: NextRequest) {
           connectedPages = [...connectedPages, ...autoConnectedFb];
         }
       } catch (e) {
-        console.error('Auto-connect Facebook pages failed:', e);
       }
     }
 
@@ -405,7 +396,6 @@ export async function GET(request: NextRequest) {
           connectedPages = [...connectedPages, ...autoConnectedIg];
         }
       } catch (e) {
-        console.error('Auto-connect Instagram pages failed:', e);
       }
     }
 
@@ -423,7 +413,6 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Facebook Pages Error: Internal server error');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -440,9 +429,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { pageId, pageName, pageAccessToken, provider = 'facebook' } = body;
+    const { pageId, pageName, pageAccessToken, provider = 'facebook', facebookPageId } = body;
+
+    console.log(`🔗 [API POST /api/facebook/pages] Connecting ${provider} page:`, {
+      pageId,
+      pageName,
+      provider,
+      hasAccessToken: !!pageAccessToken
+    });
 
     if (!pageId || !pageName || !pageAccessToken) {
+      console.error(`❌ [API POST /api/facebook/pages] Missing required fields`);
       return NextResponse.json(
         { error: 'Missing required fields: pageId, pageName, and pageAccessToken are required' },
         { status: 400 }
@@ -519,7 +516,6 @@ export async function POST(request: NextRequest) {
     // Try to automatically detect ad account ID for Facebook pages
     let adAccountId: string | null = null;
     if (provider === 'facebook') {
-      console.log(`[Ad Account Detection] Starting detection for page ${pageId}...`);
       try {
         const account = await prisma.account.findFirst({
           where: {
@@ -532,13 +528,11 @@ export async function POST(request: NextRequest) {
         });
 
         if (account?.access_token) {
-          console.log(`[Ad Account Detection] Found Facebook account token, fetching ad accounts for page ${pageId}...`);
           
           // Priority Strategy: Always use the specific ad account "Elyon Mon IKE"
           const targetBusinessName = 'Elyon Mon IKE';
           const targetAdAccountId = 'act_269316045245432';
           
-          console.log(`[Ad Account Detection] Priority Strategy: Looking for ad account "${targetBusinessName}" (ID: ${targetAdAccountId})...`);
           const priorityAdAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${account.access_token}&fields=id,account_id,name,business_name&limit=100`;
           const priorityAdAccountsResponse = await fetch(priorityAdAccountsUrl);
           
@@ -553,10 +547,8 @@ export async function POST(request: NextRequest) {
             
             if (targetAccount) {
               adAccountId = targetAccount.account_id || targetAccount.id?.replace(/^act_/i, '') || null;
-              console.log(`✅ [Ad Account Detection] Found target ad account: "${targetAccount.name}" (Business: ${targetAccount.business_name || 'N/A'}, ID: ${adAccountId})`);
               // Skip other strategies - we found the target account
             } else {
-              console.log(`ℹ️  [Ad Account Detection] Target ad account "${targetBusinessName}" not found, trying other strategies...`);
             }
           }
           
@@ -564,7 +556,6 @@ export async function POST(request: NextRequest) {
           // Only if we haven't found the target account yet
           if (!adAccountId) {
           // This gets ad accounts associated with the page's business portfolio
-          console.log(`[Ad Account Detection] Strategy 1: Trying to fetch ad accounts from page ${pageId} using user token...`);
             const pageAdAccountsUrl = `https://graph.facebook.com/v24.0/${pageId}/adaccounts?access_token=${account.access_token}&fields=id,account_id,name&limit=25`;
             const pageAdAccountsResponse = await fetch(pageAdAccountsUrl);
             
@@ -577,19 +568,15 @@ export async function POST(request: NextRequest) {
               if (pageAdAccounts.length > 0) {
                 // Use the ad account from the page's business portfolio
                 adAccountId = pageAdAccounts[0].account_id || pageAdAccounts[0].id?.replace(/^act_/i, '') || null;
-                console.log(`✅ [Ad Account Detection] Found ${pageAdAccounts.length} ad account(s) from page's business portfolio`);
-                console.log(`✅ [Ad Account Detection] Using ad account: "${pageAdAccounts[0].name || adAccountId}" (ID: ${adAccountId})`);
                 foundAdAccounts = true;
               }
             } else {
               // Log why page endpoint failed
               const errorText = await pageAdAccountsResponse.text();
-              console.log(`ℹ️  [Ad Account Detection] Page endpoint returned ${pageAdAccountsResponse.status}: ${errorText.substring(0, 200)}`);
             }
             
             // Strategy 2: Try using page access token (for customer pages managed by you)
             if (!foundAdAccounts && finalPageAccessToken) {
-            console.log(`[Ad Account Detection] Strategy 2: Trying to fetch ad accounts using page access token...`);
             const pageTokenAdAccountsUrl = `https://graph.facebook.com/v24.0/${pageId}/adaccounts?access_token=${finalPageAccessToken}&fields=id,account_id,name&limit=25`;
             const pageTokenAdAccountsResponse = await fetch(pageTokenAdAccountsUrl);
             
@@ -599,23 +586,18 @@ export async function POST(request: NextRequest) {
               
               if (pageTokenAdAccounts.length > 0) {
                 adAccountId = pageTokenAdAccounts[0].account_id || pageTokenAdAccounts[0].id?.replace(/^act_/i, '') || null;
-                console.log(`✅ [Ad Account Detection] Found ${pageTokenAdAccounts.length} ad account(s) using page token`);
-                console.log(`✅ [Ad Account Detection] Using ad account: "${pageTokenAdAccounts[0].name || adAccountId}" (ID: ${adAccountId})`);
                 foundAdAccounts = true;
               } else {
-                console.log(`ℹ️  [Ad Account Detection] Strategy 2: Page token returned empty results (no ad accounts found)`);
               }
             } else {
               const errorText = await pageTokenAdAccountsResponse.text();
               const errorMessage = errorText.substring(0, 300);
-              console.log(`ℹ️  [Ad Account Detection] Strategy 2 failed (${pageTokenAdAccountsResponse.status}): ${errorMessage}`);
             }
           }
             
             // Strategy 3: Try to get business manager from page, then get ad accounts from business
             if (!foundAdAccounts) {
             try {
-              console.log(`[Ad Account Detection] Strategy 3: Trying to get business manager ID from page...`);
               // Get business manager ID from page
               const pageBusinessUrl = `https://graph.facebook.com/v24.0/${pageId}?access_token=${account.access_token}&fields=business`;
               const pageBusinessResponse = await fetch(pageBusinessUrl);
@@ -625,10 +607,8 @@ export async function POST(request: NextRequest) {
                 const businessId = pageBusinessData.business?.id;
                 
                 if (businessId) {
-                  console.log(`[Ad Account Detection] Found business ID: ${businessId}, fetching ad accounts...`);
                   
                   // Try /client_ad_accounts first (assigned client ad accounts - most common for customer pages)
-                  console.log(`[Ad Account Detection] Strategy 3a: Trying /client_ad_accounts (assigned client accounts)...`);
                   const businessClientAdAccountsUrl = `https://graph.facebook.com/v24.0/${businessId}/client_ad_accounts?access_token=${account.access_token}&fields=id,account_id,name&limit=25`;
                   const businessClientAdAccountsResponse = await fetch(businessClientAdAccountsUrl);
                   
@@ -648,15 +628,11 @@ export async function POST(request: NextRequest) {
                       adAccountId = selectedAccount.account_id || selectedAccount.id?.replace(/^act_/i, '') || null;
                       
                       if (matchingClientAccount) {
-                        console.log(`✅ [Ad Account Detection] Found matching client ad account: "${matchingClientAccount.name}" (ID: ${adAccountId})`);
                       } else {
-                        console.log(`✅ [Ad Account Detection] Found ${businessClientAdAccounts.length} client ad account(s) from business manager (/client_ad_accounts)`);
-                        console.log(`✅ [Ad Account Detection] Using first client ad account: "${selectedAccount.name || adAccountId}" (ID: ${adAccountId})`);
                       }
                       foundAdAccounts = true;
                     } else {
                       // If /client_ad_accounts returned empty, try /owned_ad_accounts
-                      console.log(`[Ad Account Detection] Strategy 3b: /client_ad_accounts returned empty, trying /owned_ad_accounts...`);
                       const businessOwnedAdAccountsUrl = `https://graph.facebook.com/v24.0/${businessId}/owned_ad_accounts?access_token=${account.access_token}&fields=id,account_id,name&limit=25`;
                       const businessOwnedAdAccountsResponse = await fetch(businessOwnedAdAccountsUrl);
                       
@@ -675,27 +651,20 @@ export async function POST(request: NextRequest) {
                           adAccountId = selectedAccount.account_id || selectedAccount.id?.replace(/^act_/i, '') || null;
                           
                           if (matchingOwnedAccount) {
-                            console.log(`✅ [Ad Account Detection] Found matching owned ad account: "${matchingOwnedAccount.name}" (ID: ${adAccountId})`);
                           } else {
-                            console.log(`✅ [Ad Account Detection] Found ${businessOwnedAdAccounts.length} owned ad account(s) from business manager (/owned_ad_accounts)`);
-                            console.log(`✅ [Ad Account Detection] Using first owned ad account: "${selectedAccount.name || adAccountId}" (ID: ${adAccountId})`);
                           }
                           foundAdAccounts = true;
                         } else {
-                          console.log(`ℹ️  [Ad Account Detection] Business manager has no owned ad accounts`);
                         }
                       } else {
                         const errorText = await businessOwnedAdAccountsResponse.text();
                         const errorMessage = errorText.substring(0, 300);
-                        console.log(`ℹ️  [Ad Account Detection] /owned_ad_accounts failed (${businessOwnedAdAccountsResponse.status}): ${errorMessage}`);
                       }
                     }
                   } else {
                     // If /client_ad_accounts failed, try /owned_ad_accounts as fallback
                     const errorText = await businessClientAdAccountsResponse.text();
                     const errorMessage = errorText.substring(0, 300);
-                    console.log(`ℹ️  [Ad Account Detection] /client_ad_accounts failed (${businessClientAdAccountsResponse.status}): ${errorMessage}`);
-                    console.log(`[Ad Account Detection] Strategy 3b: /client_ad_accounts failed, trying /owned_ad_accounts...`);
                     const businessOwnedAdAccountsUrl = `https://graph.facebook.com/v24.0/${businessId}/owned_ad_accounts?access_token=${account.access_token}&fields=id,account_id,name&limit=25`;
                     const businessOwnedAdAccountsResponse = await fetch(businessOwnedAdAccountsUrl);
                     
@@ -714,27 +683,20 @@ export async function POST(request: NextRequest) {
                         adAccountId = selectedAccount.account_id || selectedAccount.id?.replace(/^act_/i, '') || null;
                         
                         if (matchingOwnedAccount) {
-                          console.log(`✅ [Ad Account Detection] Found matching owned ad account: "${matchingOwnedAccount.name}" (ID: ${adAccountId})`);
                         } else {
-                          console.log(`✅ [Ad Account Detection] Found ${businessOwnedAdAccounts.length} owned ad account(s) from business manager (/owned_ad_accounts)`);
-                          console.log(`✅ [Ad Account Detection] Using first owned ad account: "${selectedAccount.name || adAccountId}" (ID: ${adAccountId})`);
                         }
                         foundAdAccounts = true;
                       } else {
-                        console.log(`ℹ️  [Ad Account Detection] /owned_ad_accounts returned empty (no owned ad accounts found)`);
                       }
                     } else {
                       const errorText2 = await businessOwnedAdAccountsResponse.text();
                       const errorMessage2 = errorText2.substring(0, 300);
-                      console.log(`ℹ️  [Ad Account Detection] /owned_ad_accounts also failed (${businessOwnedAdAccountsResponse.status}): ${errorMessage2}`);
                     }
                   }
                 } else {
-                  console.log(`ℹ️  [Ad Account Detection] Page has no associated business manager`);
                 }
               }
             } catch (error) {
-              console.log(`ℹ️  [Ad Account Detection] Strategy 3 failed: ${error}`);
             }
           }
           } // End of Strategy 1, 2, 3 block (if !adAccountId)
@@ -743,7 +705,6 @@ export async function POST(request: NextRequest) {
           // Only if we haven't found any ad account yet (including from priority strategy and other strategies)
           if (!adAccountId) {
             // If all other strategies failed, try /me/adaccounts but filter/search for page-related accounts
-            console.log(`[Ad Account Detection] All strategies failed, trying user ad accounts as fallback...`);
             const userAdAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${account.access_token}&fields=id,account_id,name&limit=50`;
             const userAdAccountsResponse = await fetch(userAdAccountsUrl);
             
@@ -751,7 +712,6 @@ export async function POST(request: NextRequest) {
               const userAdAccountsData = await userAdAccountsResponse.json();
               const userAdAccounts = userAdAccountsData.data || [];
               
-              console.log(`[Ad Account Detection] Found ${userAdAccounts.length} user ad account(s)`);
               
               if (userAdAccounts.length > 0) {
                 // Try to find an ad account that matches the page name or use the first one
@@ -763,36 +723,109 @@ export async function POST(request: NextRequest) {
                 
                 if (matchingAccount) {
                   adAccountId = matchingAccount.account_id || matchingAccount.id?.replace(/^act_/i, '') || null;
-                  console.log(`✅ [Ad Account Detection] Found matching ad account: "${matchingAccount.name}" (ID: ${adAccountId})`);
                 } else {
                   // Use the first ad account as fallback
                   adAccountId = userAdAccounts[0].account_id || userAdAccounts[0].id?.replace(/^act_/i, '') || null;
-                  console.log(`⚠️  [Ad Account Detection] No page-specific ad account found, using first user ad account: "${userAdAccounts[0].name || adAccountId}" (ID: ${adAccountId})`);
-                  console.log(`💡 [Ad Account Detection] You may need to manually set the correct ad account ID in your settings`);
                 }
               } else {
-                console.log(`⚠️  [Ad Account Detection] No ad accounts found for this user`);
               }
             } else {
               // Error logging
               const errorText = await userAdAccountsResponse.text();
               const errorMessage = errorText.substring(0, 300);
-              console.error(`❌ [Ad Account Detection] Failed to fetch user ad accounts: ${userAdAccountsResponse.status} - ${errorMessage}`);
-              console.log(`💡 [Ad Account Detection] This might mean:`);
-              console.log(`   - The ads_read permission is not granted`);
-              console.log(`   - The user doesn't have access to any ad accounts`);
-              console.log(`   - The access token doesn't have the required permissions`);
             }
           }
         } else {
-          console.log(`⚠️  [Ad Account Detection] No Facebook account access token found`);
         }
       } catch (error) {
-        console.error(`❌ [Ad Account Detection] Error auto-detecting ad account:`, error);
       }
-    } else {
-      console.log(`[Ad Account Detection] Skipping detection for ${provider} (only Facebook supported)`);
+    } else if (provider === 'instagram') {
+      console.log(`📱 [API POST] Instagram page detected - attempting ad account detection`);
+      try {
+        const account = await prisma.account.findFirst({
+          where: {
+            userId: session.user.id,
+            provider: 'facebook',
+          },
+          select: {
+            access_token: true,
+          },
+        });
+
+        if (account?.access_token) {
+          // Use the facebookPageId from the request body if provided, otherwise try to fetch it
+          let connectedFacebookPageId = facebookPageId;
+          
+          if (!connectedFacebookPageId) {
+            // Fallback: Get the connected Facebook Page ID from Instagram API
+            const instagramAccountUrl = `https://graph.facebook.com/v24.0/${pageId}?fields=id,username,name,connected_facebook_page&access_token=${account.access_token}`;
+            const instagramAccountResponse = await fetch(instagramAccountUrl);
+            
+            if (instagramAccountResponse.ok) {
+              const instagramAccountData = await instagramAccountResponse.json();
+              connectedFacebookPageId = instagramAccountData.connected_facebook_page?.id;
+            } else {
+              const errorText = await instagramAccountResponse.text();
+              console.log(`⚠️  [API POST] Failed to fetch Instagram account details: ${errorText.substring(0, 200)}`);
+            }
+          }
+          
+          if (connectedFacebookPageId) {
+            console.log(`📱 [API POST] Using Facebook Page ID: ${connectedFacebookPageId} for Instagram ${pageId}`);
+            
+            // First, try to find the connected Facebook Page in the database
+            const facebookPage = await prisma.connectedPage.findFirst({
+              where: {
+                userId: session.user.id,
+                provider: 'facebook',
+                pageId: connectedFacebookPageId,
+              },
+              select: {
+                adAccountId: true,
+              },
+            });
+
+            // Use the Facebook Page's ad account ID if it's connected and has an ad account
+            if (facebookPage?.adAccountId) {
+              adAccountId = facebookPage.adAccountId;
+              console.log(`✅ [API POST] Using ad account ID from connected Facebook Page: ${adAccountId}`);
+            } else {
+              // If Facebook Page is not connected yet, try to detect ad account directly from the Facebook Page
+              console.log(`ℹ️  [API POST] Facebook Page ${connectedFacebookPageId} not connected or has no ad account ID, attempting direct detection`);
+              
+              // Try to get ad accounts directly from the Facebook Page (same logic as Facebook pages)
+              try {
+                const pageAdAccountsUrl = `https://graph.facebook.com/v24.0/${connectedFacebookPageId}/adaccounts?access_token=${account.access_token}&fields=id,account_id,name&limit=25`;
+                const pageAdAccountsResponse = await fetch(pageAdAccountsUrl);
+                
+                if (pageAdAccountsResponse.ok) {
+                  const pageAdAccountsData = await pageAdAccountsResponse.json();
+                  const pageAdAccounts = pageAdAccountsData.data || [];
+                  
+                  if (pageAdAccounts.length > 0) {
+                    adAccountId = pageAdAccounts[0].account_id || pageAdAccounts[0].id?.replace(/^act_/i, '') || null;
+                    console.log(`✅ [API POST] Found ad account ID directly from Facebook Page: ${adAccountId}`);
+                  } else {
+                    console.log(`ℹ️  [API POST] Facebook Page ${connectedFacebookPageId} has no ad accounts`);
+                  }
+                } else {
+                  const errorText = await pageAdAccountsResponse.text();
+                  console.log(`⚠️  [API POST] Failed to fetch ad accounts from Facebook Page: ${errorText.substring(0, 200)}`);
+                }
+              } catch (error: any) {
+                console.error(`❌ [API POST] Error fetching ad accounts from Facebook Page:`, error?.message);
+              }
+            }
+          } else {
+            console.log(`ℹ️  [API POST] Instagram account ${pageId} has no connected Facebook Page`);
+          }
+        }
+      } catch (error: any) {
+        console.error(`❌ [API POST] Error detecting ad account for Instagram:`, error?.message);
+      }
     }
+
+    console.log(`💾 [API POST] Storing connected page with adAccountId: ${adAccountId || 'null'}`);
 
     // Store connected page
     try {
@@ -818,10 +851,8 @@ export async function POST(request: NextRequest) {
       // This allows reconnecting a page to automatically refresh the ad account ID
       if (adAccountId) {
         updateData.adAccountId = adAccountId;
-        console.log(`✅ [Ad Account Detection] Setting ad account ID: ${adAccountId} for page ${pageId}`);
       } else if (existingPage && !existingPage.adAccountId) {
         // Keep existing behavior: only log if page exists but has no ad account ID
-        console.log(`ℹ️  [Ad Account Detection] No ad account detected. Keeping existing value (if any).`);
       }
 
       const connectedPage = await prisma.connectedPage.upsert({
@@ -850,7 +881,7 @@ export async function POST(request: NextRequest) {
       // Auto-fetch comments for the first time after connecting the page
       // This runs in the background so it doesn't block the response
       if (connectedPage.id) {
-        console.log(`🔄 [Auto-fetch] Triggering initial comment fetch for page ${pageName}...`);
+        console.log(`🔄 [API POST] Starting background comment fetch for ${provider} page ${pageId}`);
         // Call fetchCommentsInBackground asynchronously without awaiting (fire and forget)
         // This will fetch comments from both posts and ads automatically
         const isInstagram = provider === 'instagram';
@@ -862,9 +893,16 @@ export async function POST(request: NextRequest) {
           finalPageAccessToken,
           null // fetchSince = null means fetch all comments
         ).catch((error) => {
-          console.error(`❌ [Auto-fetch] Error fetching initial comments for page ${pageName}:`, error);
+          console.error(`❌ [API POST] Error in background comment fetch:`, error?.message);
         });
       }
+
+      console.log(`✅ [API POST] Page connected successfully:`, {
+        pageId: connectedPage.pageId,
+        pageName: connectedPage.pageName,
+        provider: connectedPage.provider,
+        adAccountId: connectedPage.adAccountId || 'No Ad Account'
+      });
 
       return NextResponse.json({ success: true, page: connectedPage });
     } catch (dbError: any) {
@@ -921,10 +959,8 @@ export async function PATCH(request: NextRequest) {
 
       if (normalizedAdAccountId) {
         updateData.adAccountId = normalizedAdAccountId;
-        console.log(`✅ [Ad Account Update] Setting ad account ID: ${normalizedAdAccountId} for page ${pageId}`);
       } else {
         updateData.adAccountId = null;
-        console.log(`✅ [Ad Account Update] Clearing ad account ID for page ${pageId}`);
       }
 
       const connectedPage = await prisma.connectedPage.update({
@@ -966,7 +1002,6 @@ export async function PATCH(request: NextRequest) {
       throw dbError;
     }
   } catch (error: any) {
-    console.error('[Ad Account Update] Error:', error);
     return NextResponse.json(
       {
         error: error?.message || 'Internal server error',
